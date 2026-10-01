@@ -1,13 +1,13 @@
 from dataclasses import dataclass, field
 from typing import Any, Mapping, Optional
 
-from src.core.events import EventData
+from src.core.events import JsonEvent
 from src.modules.emotion.events import Emotion
 from src.modules.speech_to_text.events import Transcript
 
 
 @dataclass
-class RAGResult(EventData):
+class RAGResult(JsonEvent):
     """What RAGHandle returns."""
 
     answer: str
@@ -15,7 +15,7 @@ class RAGResult(EventData):
 
 
 @dataclass
-class PartialQuestion(EventData):
+class PartialQuestion(JsonEvent):
     """Partial question used to aggregate a sentence to an emotion."""
 
     transcript: Optional[Transcript]
@@ -23,7 +23,7 @@ class PartialQuestion(EventData):
 
 
 @dataclass
-class RAGQuestion(EventData):
+class RAGQuestion(JsonEvent):
     """Fully aggregated question to send to the RAG."""
 
     transcript: Transcript

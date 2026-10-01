@@ -3,17 +3,18 @@ from typing import Optional
 import numpy as np
 import webrtcvad
 
+from src.core.events import BytesEvent
 from src.core.module import Module
 
 from .events import Voice
 
 
-class MIC(Module):
-    """MIC Module
+class VAD(Module):
+    """VAD Module
 
     Detect voice and silence using WebRTC VAD.
 
-    input: audio_in,
+    input: audio.in,
     output: voice
 
     :vad_agressiveness: from 0 (low) to 3 (high, can distord audio).
@@ -24,9 +25,9 @@ class MIC(Module):
     """
 
     # Inbound microphone frames travel on their own topic so the TTS-output
-    # "audio" topic (consumed by Gesture and the client Sender) never collides
+    # "audio" topic (consumed by MOV and the client Sender) never collides
     # with mic input — otherwise raw mic bytes get echoed back to the client.
-    input_type = "audio_in"
+    input_type = "audio.in"
     output_type = "voice"
 
     def __init__(
@@ -49,11 +50,11 @@ class MIC(Module):
 
         self.vad = webrtcvad.Vad(vad_agressiveness)
 
-    async def process(self, data: bytes) -> Optional[Voice]:
-        if self.vad.is_speech(data, self.sample_rate) is True:
+    async def process(self, data: BytesEvent) -> Optional[Voice]:
+        if self.vad.is_speech(data.data, self.sample_rate) is True:
             self.silence_frames_count = 0
 
-            audio_array = np.frombuffer(data, dtype=np.int16)
+            audio_array = np.frombuffer(data.data, dtype=np.int16)
             audio_array_float = audio_array.astype(np.float32) / 32768.0
 
             return Voice(audio_array_float)

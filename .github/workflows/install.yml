@@ -1,0 +1,138 @@
+# The expensive check: does scripts/install_local.sh actually install a working
+# HuRI on a clean machine?
+#
+# Nightly and on demand rather than per-push, because a full CPU install pulls
+# ~3.5 GB of wheels and takes 15-30 minutes per target. CI.yml covers the cheap
+# signals on every commit.
+#
+# This is the job that answers "can a teammate clone this and run it", and it is
+# the only automated thing that exercises: dependency resolution, the sdist
+# builds (webrtcvad, and pyworld when CosyVoice is selected), the model
+# downloads, the generated configs, and the verification stage end to end.
+#
+# It cannot cover the GPU paths — no hosted runner has a GPU. See gpu.yml.
+name: install
+
+on:
+  schedule:
+    # 04:17 UTC — off the hour, so it does not pile onto GitHub's peak.
+    - cron: "17 4 * * *"
+  workflow_dispatch:
+    inputs:
+      targets:
+        description: "Which targets to run"
+        type: choice
+        default: both
+        options: [both, ubuntu-24.04, ubuntu-22.04]
+      tts_engine:
+        description: "TTS engine to install"
+        type: choice
+        default: piper
+        options: [piper, cosyvoice]
+
+permissions:
+  contents: read
+
+jobs:
+  install:
+    name: full install (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 75
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.targets != 'both'
+               && fromJSON(format('["{0}"]', github.event.inputs.targets))
+               || fromJSON('["ubuntu-24.04","ubuntu-22.04"]') }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: disk before
+        run: df -h / | tail -1
+
+      - name: install
+        # --profile cpu            : runners have no GPU; make that explicit
+        #                            rather than relying on detection
+        # --skip-services          : do not install Ollama (multi-GB models) or
+        #                            fight the runner over ports; the LLM is
+        #                            exercised by the plan, not by a real pull
+        # --llm-model qwen2.5:1.5b : pin the tier so the plan is deterministic
+        #                            regardless of the runner's RAM
+        # --python /usr/bin/python3: 3.12 on 24.04, 3.10 on 22.04 — both supported
+        run: |
+          ./scripts/install_local.sh -y \
+            --profile cpu \
+            --python /usr/bin/python3 \
+            --tts-engine "${{ github.event.inputs.tts_engine || 'piper' }}" \
+            --llm-model qwen2.5:1.5b \
+            --skip-services
+
+      - name: verification must have passed
+        # install_local.sh already exits non-zero when verify fails; assert on the
+        # individual lines too so a silently skipped check is visible.
+        run: |
+          log=.huri-local/install.log
+          for want in "core imports" "module registry builds" "STT model loads"; do
+            grep -q "OK    $want" "$log" \
+              || { echo "::error::missing verification: $want"; exit 1; }
+          done
+          if [ "${{ github.event.inputs.tts_engine || 'piper' }}" = "piper" ]; then
+            grep -q "OK    piper synthesises" "$log" \
+              || { echo "::error::piper did not synthesise"; exit 1; }
+          fi
+          echo "all expected verification lines present"
+
+      - name: the generated configs are usable
+        run: |
+          source .huri-local/env.sh
+          python - <<'PY'
+          import yaml
+          from src.client import load_client_config
+          serve = yaml.safe_load(open("config/huri_local.generated.yaml"))
+          app = serve["applications"][0]
+          names = [d["name"] for d in app["deployments"]]
+          env = app["runtime_env"]["env_vars"]
+          print("deployments :", names)
+          print("HURI_MODULES:", env["HURI_MODULES"])
+          # Every deployment Serve is told to configure must be one the app will
+          # actually build, or `serve deploy` fails the whole application.
+          expected = {"stt": "STTHandle", "emo": "EMOHandle", "rag": "RAGHandle", "tts": "TTSHandle", "mov": "MOVHandle"}
+          mods = set(env["HURI_MODULES"].split(","))
+          for mod, dep in expected.items():
+              if dep in names:
+                  assert mod in mods, f"{dep} is configured but {mod} is not in HURI_MODULES"
+          cfg = load_client_config("config/client_local.generated.yaml")
+          assert set(cfg.modules) == mods, (
+              f"client modules {sorted(cfg.modules)} != server {sorted(mods)}"
+          )
+          print("client/server module sets agree:", sorted(mods))
+          PY
+
+      - name: a module subset also installs and generates cleanly
+        run: |
+          ./scripts/install_local.sh -y --only config,verify \
+            --profile cpu --python /usr/bin/python3 --skip-services \
+            --modules vad,stt,tag,qag,rag --llm-model qwen2.5:1.5b
+          grep -q 'HURI_MODULES: "vad,stt,tag,qag,rag"' config/huri_local.generated.yaml \
+            || { echo "::error::--modules did not reach the generated config"; exit 1; }
+
+      - name: disk after
+        if: always()
+        run: df -h / | tail -1
+
+      - name: sizes
+        if: always()
+        run: du -xsh .venv assets 2>/dev/null || true
+
+      - name: upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: install-${{ matrix.os }}
+          path: |
+            .huri-local/install.log
+            .huri-local/plan.env
+            .huri-local/huri.env
+            config/huri_local.generated.yaml
+            config/client_local.generated.yaml
+          if-no-files-found: warn

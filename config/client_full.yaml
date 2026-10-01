@@ -1,10 +1,12 @@
 huri_url: ws://localhost:8000/session
-
-topic_list: [transcript, question, token, motion]
+# Required by ClientConfig.from_dict; this was the only client config missing
+# it, so the "everything on" example died with a bare KeyError.
+interface_path: src.interfaces.cli_interface:cli_interface
 
 senders:
   audio:
     name: audio
+    topic: audio.in
     args:
       sample_rate: 16000
       frame_duration: 0.030
@@ -18,14 +20,17 @@ senders:
 hooks:
   audio:
     name: audio
-    topics: [audio]
+    topics: [audio.out]
     args:
       incoming_sample_rate: ${senders.audio.args.sample_rate}
       sample_rate: 44100
+  motion:
+    name: motion
+    topics: [motion]
 
 modules:
-  mic:
-    name: mic
+  vad:
+    name: vad
     args:
       vad_agressiveness: 3
       silence_duration: 1.5
@@ -58,9 +63,11 @@ modules:
     logging: INFO
   tts:
     name: tts
-    args:
-      min_clause_chars: 20
+    # No args: TTS.__init__ takes only the deployment handle, so any key here is
+    # a TypeError at session start. `min_clause_chars` was a leftover from a
+    # design where HuRI buffered clauses itself — CosyVoice's frontend does the
+    # segmentation now.
     logging: INFO
-  gesture:
-    name: gesture
+  mov:
+    name: mov
     logging: INFO

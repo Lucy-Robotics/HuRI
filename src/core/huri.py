@@ -32,7 +32,7 @@ class HuRI:
         self,
         modules: Dict[str, Type[Module]],
         handles: Dict[str, handle.DeploymentHandle],
-        events: Dict[str, Type[EventData | bytes]],
+        events: Dict[str, Type[EventData]],
     ) -> None:
         self.module_factory = ModuleFactory(handles)
         self.event_factory = EventDataFactory()
@@ -47,6 +47,18 @@ class HuRI:
             self.event_factory.register(module_cls.output_type, event_cls)
 
         self.clients: Dict[str, Session] = {}
+
+    @staticmethod
+    def _check_subscriptions(pipeline: List[Module], topics: List[str]) -> None:
+        produced = {m.output_type for m in pipeline if m.output_type is not None}
+        unknown = sorted({t for t in topics if t not in produced})
+        if unknown:
+            raise ValueError(
+                f"hook topic(s) {unknown} are not emitted by any module in this "
+                f"session's pipeline "
+                f"({sorted(type(m).__name__ for m in pipeline)}). "
+                f"Subscribable topics: {sorted(produced)}"
+            )
 
     @app.websocket("/session")
     async def run_session(self, ws: WebSocket):
@@ -83,13 +95,25 @@ class HuRI:
             for hook_config in client_config.hooks.values()
             for topic in hook_config.topics
         ]
-        senders: List[Module] = [Sender(ws, topic) for topic in topic_list]
-        modules: List[Module] = (
-            self.module_factory.create_from_config(
+        try:
+            pipeline: List[Module] = self.module_factory.create_from_config(
                 client_config.user_id, client_config.modules
             )
-            + senders
-        )
+            self._check_subscriptions(pipeline, topic_list)
+        except Exception as e:
+            await ws.send_json(
+                {
+                    "type": "session_error",
+                    "error": f"{type(e).__name__}: {e}",
+                    "server_modules": self.module_factory.registered(),
+                }
+            )
+            await ws.close(code=1008, reason="invalid session config")
+            print(f"[HuRI] rejected session for {client_config.user_id}: {e}")
+            return
+
+        senders: List[Module] = [Sender(ws, topic) for topic in topic_list]
+        modules: List[Module] = pipeline + senders
 
         await ws.send_json({"type": "session_init", "user_id": client_config.user_id})
 
@@ -118,9 +142,17 @@ config: {client_config}")
                         topic = event["topic"]
                         data = event["data"]  # TODO client/server one function
 
-                    data = self.event_factory.create(topic, data)
+                    try:
+                        event_data = self.event_factory.create(topic, data)
+                    except RuntimeError as e:
+                        print(
+                            f"[HuRI] client {client_config.user_id}: dropping frame "
+                            f"on topic {topic!r}: {e}. Known inbound topics: "
+                            f"{self.event_factory.topics()}"
+                        )
+                        continue
 
-                    await session.publish(topic, data)
+                    await session.publish(topic, event_data)
 
             except RuntimeError as e:
                 print(f"[ERROR] Client {client_config.user_id}:", e)

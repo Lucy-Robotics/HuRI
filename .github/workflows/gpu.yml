@@ -1,0 +1,120 @@
+# GPU verification on real hardware — the one thing hosted CI can never do.
+#
+# No GitHub-hosted runner has a GPU, so this needs a self-hosted runner on a
+# machine with an actual NVIDIA or AMD card. It is the only automated check that
+# can catch the class of bug that is most expensive to find by hand, for example:
+#
+#   * a torch wheel that reports the GPU happily and then aborts inside HIP on
+#     the first kernel launch, because the build has no code objects for that
+#     architecture (repo.radeon.com's ".lw." wheels omit consumer RDNA3)
+#   * CTranslate2 silently running its CPU build while the log says "ROCm wheel"
+#   * a model that loads on the GPU and then faults in a specific kernel
+#
+# ---------------------------------------------------------------------------
+# SECURITY — read before registering a runner
+# ---------------------------------------------------------------------------
+# This repository is public. A self-hosted runner will execute whatever a fork's
+# pull request contains unless you prevent it. GitHub's own guidance is not to
+# use self-hosted runners on public repos for that reason.
+#
+# This workflow is therefore `workflow_dispatch` only: it never runs from a pull
+# request, and a maintainer has to trigger it. Do NOT add `pull_request` here.
+# Also set, in the repository settings:
+#   Actions > General > Fork pull request workflows
+#     -> "Require approval for all outside collaborators"
+#   Actions > Runners > (your runner) -> restrict to this repository
+#
+# ---------------------------------------------------------------------------
+# Registering the runner (once, on the GPU machine)
+# ---------------------------------------------------------------------------
+#   Settings > Actions > Runners > New self-hosted runner, then:
+#     ./config.sh --url https://github.com/Sentience-Robotics/HuRI \
+#                 --token <TOKEN> --labels self-hosted,linux,gpu,rocm
+#     sudo ./svc.sh install && sudo ./svc.sh start
+#
+# Label it `rocm` or `cuda` so the vendor is explicit; this workflow accepts
+# either via the `vendor` input.
+name: gpu
+
+on:
+  workflow_dispatch:
+    inputs:
+      vendor:
+        description: "Runner label for the GPU vendor"
+        type: choice
+        default: rocm
+        options: [rocm, cuda]
+      reinstall:
+        description: "Reinstall the python environment first (slow, but tests the vendor wheel path)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: GPU verify (${{ github.event.inputs.vendor }})
+    runs-on: [self-hosted, linux, "${{ github.event.inputs.vendor }}"]
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: what hardware are we on
+        run: |
+          echo "--- vendor tools"
+          command -v rocm-smi >/dev/null && rocm-smi --showproductname || true
+          command -v nvidia-smi >/dev/null && nvidia-smi --query-gpu=name,memory.total --format=csv || true
+          echo "--- ROCm runtime on the loader path (the thing whose absence breaks everything)"
+          ldconfig -p | grep -E 'libamdhip64|libroctx64' || echo "  no ROCm HIP runtime found"
+
+      - name: reinstall the python environment
+        if: github.event.inputs.reinstall == 'true'
+        # Exercises the vendor wheel path itself: which index the AMD branch
+        # pulls torch from, and whether install_ct2_rocm really replaces the
+        # PyPI CTranslate2 (it silently did not, before --force-reinstall).
+        run: ./scripts/install_local.sh -y --only python,models --skip-services
+
+      - name: plan
+        run: ./scripts/install_local.sh --plan-only
+
+      - name: verify against real hardware
+        run: ./scripts/install_local.sh -y --only config,verify
+
+      - name: the GPU must be usable, not merely present
+        # torch.cuda.is_available() is True on a wheel with no kernels for this
+        # card. Launching one is the only honest check.
+        run: |
+          source .huri-local/env.sh
+          python - <<'PY'
+          import torch
+          print("torch      :", torch.__version__)
+          print("this GPU   :", torch.cuda.get_device_properties(0).gcnArchName)
+          print("built for  :", torch.cuda.get_arch_list())
+          a = torch.randn(512, 512, device="cuda", dtype=torch.float16)
+          (a @ a).float().sum().item()
+          torch.cuda.synchronize()
+          print("kernel launch: OK")
+          PY
+
+      - name: STT must run on the GPU
+        run: |
+          source .huri-local/env.sh
+          python - <<'PY'
+          import os, numpy as np
+          from faster_whisper import WhisperModel
+          m = WhisperModel(os.environ["HURI_STT_MODEL_PATH"], device="cuda", compute_type="float16")
+          segments, _ = m.transcribe(np.zeros(16000, dtype=np.float32))
+          list(segments)
+          print("STT on GPU: OK")
+          PY
+
+      - name: upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gpu-${{ github.event.inputs.vendor }}
+          path: |
+            .huri-local/install.log
+            .huri-local/plan.env
+          if-no-files-found: warn

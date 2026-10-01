@@ -10,8 +10,17 @@ pytest-asyncio==1.4.0
 # server
 numpy==1.26.4
 ray[serve]==2.55.1
+# setuptools: webrtcvad does `import pkg_resources` at import time and
+# python 3.12 no longer ships setuptools. constraints.txt caps it at <82
+# (pkg_resources was removed there), but a constraint never *installs* a
+# package -- it only pins one that something else pulls in. Nothing does.
+setuptools
 webrtcvad==2.0.10
 faster-whisper==1.2.1
+# Default TTS engine: ONNX only (no torch), abi3 wheel for x86_64 + aarch64,
+# ~30x faster than realtime on CPU. CosyVoice (requirements-nvidia.txt) is the
+# opt-in alternative for zero-shot voice cloning on an NVIDIA GPU.
+piper-tts==1.8.0
 qdrant-client==1.18.0
 sentence-transformers==3.2.1
 pypdf==5.1.0

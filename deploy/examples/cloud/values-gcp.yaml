@@ -108,7 +108,7 @@ ray:
             ray_actor_options:
               num_cpus: 1
               num_gpus: 0
-          - name: STT
+          - name: STTHandle
             # Client isolation is per-session (audio cache lives in the STT
             # module); this actor is stateless per call. HURI_STT_NUM_WORKERS
             # gives in-replica concurrency; replicas add cross-actor parallelism
@@ -122,6 +122,13 @@ ray:
               num_cpus: 1
               num_gpus: 0.2
               resources: {"GPU_TYPE_NVIDIA": 0.2}
+          - name: EMOHandle
+            # Stateless per call; sliding-window buffering is per-session in
+            # the EMO module. CPU inference, no GPU.
+            max_ongoing_requests: 8
+            ray_actor_options:
+              num_cpus: 1
+              num_gpus: 0
           - name: RAGHandle
             # CPU/network-bound (num_gpus: 0) ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â these replicas schedule on the
             # existing nodes without needing GPU, so this one genuinely scales
@@ -150,7 +157,7 @@ ray:
               llm_provider: "vllm"
               llm_model: "huri-fast"
               verify_ssl: true
-          - name: TTS
+          - name: TTSHandle
             # Streaming synth runs per-utterance in a thread (run_in_executor),
             # so one replica already serves several sessions; replicas pack onto
             # the A100 at 0.1 each for more concurrent utterances.
@@ -162,7 +169,7 @@ ray:
               num_cpus: 1
               num_gpus: 0.1 # logical GPU fraction for Ray packing (see note above)
               resources: {"GPU_TYPE_NVIDIA": 0.1}
-          - name: GestureGeneration
+          - name: MOVHandle
             # Sync infer() is auto-threaded by Serve (concurrent within a
             # replica). Replicas pack onto the A100 at 0.1 each.
             autoscaling_config:
@@ -347,7 +354,7 @@ models:
     modelSource:
       type: huggingface
       repoId: superb/hubert-large-superb-er
-  # emage (gesture) weights stay DISABLED on GCP: GestureGeneration is already
+  # emage (gesture) weights stay DISABLED on GCP: MOVHandle is already
   # HEALTHY without them. Leave off until it's actually needed.
   emage:
     nodeSelector:

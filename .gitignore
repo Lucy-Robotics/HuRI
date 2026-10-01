@@ -221,3 +221,9 @@ docs
 
 # HuRI client outputs
 *.wav
+/.huri-local/
+/assets/
+config/*.generated.yaml
+/qdrant_storage/
+/.venv*/
+/uv.lock

@@ -1,121 +1,50 @@
-import asyncio
 import logging
-from collections import defaultdict
-from dataclasses import dataclass
-from typing import Any, Mapping
-
-import numpy as np
-
-from .module import Module
+from dataclasses import asdict, dataclass
+from typing import Any, Generic, Mapping, TypeVar
 
 logger = logging.getLogger("ray.serve")
 
+WireT = TypeVar("WireT", Mapping[str, Any], bytes)
+
 
 @dataclass
-class EventData:
+class EventData(Generic[WireT]):
     """An event data must be derived from this class, and use @dataclass decorator.
     Or they can be bytes."""
 
     @classmethod
-    def from_wire(cls, data: Mapping[str, Any]) -> "EventData":
-        """Build an event from a JSON payload sent by a client.
+    def from_wire(cls, data: WireT) -> "EventData[WireT]":
+        raise NotImplementedError
 
-        Default: keyword-splat the payload onto the dataclass. Events whose fields
-        are nested dataclasses (or that accept a simpler external shape than the
-        in-pipeline one) override this — e.g. RAGQuestion accepts a bare
-        ``{"text": ...}`` typed question. In-process producers construct the
-        dataclass directly and never go through this path.
-        """
+    def to_wire(self) -> WireT:
+        raise NotImplementedError
+
+    def summarize(self) -> str:
+        cls = type(self).__name__
+        return f"{cls}({self!r})"
+
+
+@dataclass
+class JsonEvent(EventData[Mapping[str, Any]]):
+    @classmethod
+    def from_wire(cls, data: Mapping[str, Any]) -> "JsonEvent":
         return cls(**data)
 
-
-class EventGraph:
-    """
-    Asynchronous event routing system for HuRI modules.
-
-    The EventGraph is responsible for:
-        - Registering module subscribers
-        - Routing events between modules
-        - Executing module pipelines asynchronously
-        - Handling coroutine and async generator outputs
-
-    Modules subscribe to events through their `input_type`.
-    When an event is published, all subscribed modules are executed
-    concurrently.
-
-    Supports:
-        - Coroutine-based modules
-        - Async generator streaming modules
-        - Recursive event propagation
-
-    :subscribers:
-        Dictionary mapping event topics to subscribed modules.
-    """
-
-    def __init__(self):
-        self.subscribers = defaultdict(list)
-
-    def register(self, module: Module):
-        self.subscribers[module.input_type].append(module)
-
-    async def publish(self, event_topic, data):
-        subs = self.subscribers[event_topic]
-        if event_topic not in ("audio_in",):  # skip mic-frame spam
-            logger.info(
-                "[GRAPH] publish topic=%r subscribers=%s",
-                event_topic,
-                [type(m).__name__ for m in subs],
-            )
-        for module in subs:
-            asyncio.create_task(self._run(module, data))
-
-    async def _run(self, module: Module, data):
-        try:
-            result = module.process(data)
-
-            if hasattr(result, "__aiter__"):
-                try:
-                    async for item in result:
-                        if item is None:
-                            continue
-                        logger.info(
-                            "[GRAPH] %s -> %r: %s",
-                            type(module).__name__,
-                            module.output_type,
-                            _summarize(item),
-                        )
-                        await self.publish(module.output_type, item)
-                except Exception:
-                    logger.exception(
-                        "[GRAPH] async generator failed in %s", type(module).__name__
-                    )
-
-            else:
-                try:
-                    value = await result
-                    if value is not None:
-                        logger.info(
-                            "[GRAPH] %s -> %r: %s",
-                            type(module).__name__,
-                            module.output_type,
-                            _summarize(value),
-                        )
-                        await self.publish(module.output_type, value)
-                except Exception:
-                    logger.exception(
-                        "[GRAPH] coroutine failed in %s", type(module).__name__
-                    )
-
-        except Exception:
-            logger.exception(
-                "[GRAPH] process() call failed in %s", type(module).__name__
-            )
+    def to_wire(self) -> Mapping[str, Any]:
+        return asdict(self)
 
 
-def _summarize(item) -> str:
-    """Short repr that avoids dumping full numpy arrays into the log."""
-    cls = type(item).__name__
-    data = getattr(item, "data", None)
-    if isinstance(data, np.ndarray):
-        return f"{cls}(shape={data.shape}, dtype={data.dtype})"
-    return f"{cls}({item!r})"
+@dataclass
+class BytesEvent(EventData[bytes]):
+    data: bytes
+
+    @classmethod
+    def from_wire(cls, data: bytes) -> "BytesEvent":
+        return cls(data=data)
+
+    def to_wire(self) -> bytes:
+        return self.data
+
+    def summarize(self) -> str:
+        cls = type(self).__name__
+        return f"{cls}(len:{len(self.data)})"

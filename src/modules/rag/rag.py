@@ -25,15 +25,15 @@ from src.modules.text_to_speech.events import Token
 from .events import RAGQuestion
 from .qdrant_utils import make_qdrant_client
 
-# Reserved _user_id for documents visible to EVERY user (e.g. the HuRI project
-# overview). Retrieval matches the querying user's own id OR this shared id, so
-# one ingested copy is reachable by all sessions. Ingest global docs with
-# `ingestion.py --user-id __shared__ ...`. Keep in sync with any ingestion.
+_RETRIABLE_EXC = (
+    httpx.ConnectError,
+    httpx.ConnectTimeout,
+    httpx.ReadTimeout,
+    httpx.RemoteProtocolError,
+)
+
 SHARED_USER_ID = "__shared__"
 
-# Default character persona. Overridable per session via the `persona` key in the
-# client config's module args, or globally via HURI_RAG_DEFAULT_PERSONA in the
-# Serve app runtime_env.env_vars (see deploy values.yaml) — no rebuild needed.
 _DEFAULT_PERSONA = os.environ.get(
     "HURI_RAG_DEFAULT_PERSONA",
     "You are Mouse-Man, a witty, charismatic animated mouse character. "
@@ -51,10 +51,14 @@ class RAGDeploymentConfig(BaseModel):
     llm_provider: str = "ollama"  # "vllm", "ollama", "api"
     llm_url: str = "http://localhost:11434"
     llm_model: str = "mistral:7b"
-    llm_api_key: str = ""
+    llm_api_key: str = os.environ.get("HURI_LLM_API_KEY", "")
     verify_ssl: bool = True
     top_k: int = 5
     score_threshold: float = 0.5
+
+    embed_retries: int = 3
+    llm_retries: int = 3
+    retry_base_delay: float = 1.0
 
     memory_collection: str = "conversations"
     memory_top_k: int = 3
@@ -73,9 +77,6 @@ class RAGQuery:
     _user_id: str
     question: str
     preferences: dict = field(default_factory=dict)
-    # Prior conversation turns as OpenAI-style messages
-    # ([{"role": "user"|"assistant", "content": str}, ...]). The handle is
-    # stateless, so the per-session RAG module owns and supplies this.
     history: list = field(default_factory=list)
 
 
@@ -99,6 +100,9 @@ class RAGHandle:
         self.embedding_url = cfg.embedding_url or cfg.llm_url
         self._qdrant = make_qdrant_client(cfg.qdrant_url, cfg.verify_ssl)
         print(f"[RAGHandle] Connected to Qdrant at {cfg.qdrant_url}")
+        # One-shot warning bookkeeping for _search (see there).
+        self._warned_collections: set[str] = set()
+        self._report_document_collection()
         self._embed_client = httpx.AsyncClient(timeout=30.0, verify=cfg.verify_ssl)
         self._llm_client = httpx.AsyncClient(timeout=120.0, verify=cfg.verify_ssl)
         task = self._maintenance_task
@@ -107,16 +111,66 @@ class RAGHandle:
                 self._maintenance_loop()
             )
 
+    def _report_document_collection(self) -> None:
+        """
+        Say at startup whether the document collection exists.
+        """
+
+        collection = self._cfg.default_collection
+        try:
+            names = [c.name for c in self._qdrant.get_collections().collections]
+        except Exception as e:  # noqa: BLE001 - never block startup on this
+            print(f"[RAGHandle] WARNING: cannot list Qdrant collections: {e}")
+            print("[RAGHandle]          document retrieval will return nothing")
+            return
+
+        if collection in names:
+            try:
+                count = self._qdrant.count(collection_name=collection).count
+                print(f"[RAGHandle] documents: '{collection}' has {count} points")
+                if count == 0:
+                    print(
+                        "[RAGHandle] WARNING: it is empty — answers will not be "
+                        "grounded in any document"
+                    )
+            except Exception:  # noqa: BLE001
+                print(f"[RAGHandle] documents: '{collection}' present")
+        else:
+            print(
+                f"[RAGHandle] WARNING: no '{collection}' collection in Qdrant "
+                f"(found: {', '.join(names) or 'none'})"
+            )
+            print("[RAGHandle]          document retrieval returns nothing.")
+            print("[RAGHandle]          Ingest: python -m src.modules.rag.ingestion")
+
     def _resolve_user_context(self, _user_id: str) -> tuple[str, dict | None]:
         collection = self._cfg.default_collection
         filters = {"_user_id": _user_id}
         return collection, filters
 
+    async def _retry_on_connect_failure(self, func, *, attempts: int, what: str):
+        for attempt in range(1, attempts + 1):
+            try:
+                return await func()
+            except _RETRIABLE_EXC as e:
+                if attempt == attempts:
+                    raise
+                delay = self._cfg.retry_base_delay * (2 ** (attempt - 1))
+                print(
+                    f"[RAG] {what} failed (attempt {attempt}/{attempts}): "
+                    f"{e!r} — retrying in {delay:.1f}s"
+                )
+                await asyncio.sleep(delay)
+
     async def _embed(self, text: str) -> list[float]:
         url = f"{self.embedding_url}/v1/embeddings"
-        resp = await self._embed_client.post(
-            url,
-            json={"model": self._cfg.embedding_model, "input": str(text)},
+        resp = await self._retry_on_connect_failure(
+            lambda: self._embed_client.post(
+                url,
+                json={"model": self._cfg.embedding_model, "input": str(text)},
+            ),
+            attempts=self._cfg.embed_retries,
+            what=f"Embedding request to {url}",
         )
         if resp.status_code != 200:
             raise RuntimeError(
@@ -137,11 +191,8 @@ class RAGHandle:
             ) from e
 
     def _get_profile(self, collection: str, _user_id: str) -> list[str]:
-        """Always-on facts about the user (name, etc.).
-
-        Retrieved deterministically by filter — NOT by vector similarity —
-        so they are always available to the prompt regardless of the question.
-        Populated via `ingestion.py profile`.
+        """
+        Always-on facts about the user (name, etc.).
         """
         try:
             points, _ = self._qdrant.scroll(
@@ -183,7 +234,11 @@ class RAGHandle:
             parts.append(d)
         return "".join(parts)
 
-    def _memory_strength(self, payload: dict, relevance: float) -> float:
+    def _recency_importance(self, payload: dict) -> tuple[float, int]:
+        """
+        Exponential decay factor and importance for one memory point.
+        """
+
         importance: int = payload.get("importance", 3)
         half_life = max(self._cfg.memory_half_life_days * (importance / 5.0), 0.5)
         try:
@@ -193,7 +248,10 @@ class RAGHandle:
             age_days = (datetime.now() - last).total_seconds() / 86400.0
         except Exception:
             age_days = 0.0
-        recency: float = 0.5 ** (age_days / half_life)
+        return 0.5 ** (age_days / half_life), importance
+
+    def _memory_strength(self, payload: dict, relevance: float) -> float:
+        recency, importance = self._recency_importance(payload)
         cfg = self._cfg
         return (
             cfg.memory_w_relevance * relevance
@@ -230,7 +288,6 @@ class RAGHandle:
         )
         top = scored[: self._cfg.memory_top_k]
 
-        # MemoryBank-style reinforcement: recalled memories decay slower.
         now = datetime.now().isoformat()
         for p in top:
             try:
@@ -323,8 +380,6 @@ class RAGHandle:
         return None
 
     def _mark_maintenance_done(self, vector_size: int) -> None:
-        # Marker point: zero vector, type=maintenance_marker. Filtered out of
-        # retrieval automatically (zero vector never scores) but be explicit anyway.
         self._qdrant.upsert(
             collection_name=self._cfg.memory_collection,
             points=[
@@ -340,8 +395,6 @@ class RAGHandle:
         )
 
     async def _maintenance_loop(self) -> None:
-        import asyncio
-
         check_secs = self._cfg.memory_maintenance_check_hours * 3600
         while True:
             try:
@@ -382,17 +435,7 @@ class RAGHandle:
             return  # collection doesn't exist yet — nothing to do
 
         def base_strength(payload: dict) -> float:
-            # query-independent: recency * importance
-            imp: int = payload.get("importance", 3)
-            half = max(self._cfg.memory_half_life_days * (imp / 5.0), 0.5)
-            try:
-                last = datetime.fromisoformat(
-                    payload.get("last_accessed") or payload["created_at"]
-                )
-                age = (datetime.now() - last).total_seconds() / 86400.0
-            except Exception:
-                age = 0.0
-            recency: float = 0.5 ** (age / half)
+            recency, imp = self._recency_importance(payload)
             return recency * (imp / 10.0)
 
         to_delete, weak_by_user = [], defaultdict(list)
@@ -426,9 +469,7 @@ class RAGHandle:
             vec = await self._embed(merged)
             vector_size = len(vec)
             now = datetime.now().isoformat()
-            imp = min(
-                max((p.payload or {}).get("importance", 3) for p in weak) + 1, 10
-            )
+            imp = min(max((p.payload or {}).get("importance", 3) for p in weak) + 1, 10)
             self._qdrant.upsert(
                 collection_name=self._cfg.memory_collection,
                 points=[
@@ -476,17 +517,12 @@ class RAGHandle:
             should: Any = None
             for k, v in filters.items():
                 if k == "_user_id":
-                    # Match the querying user's own docs OR the shared/global
-                    # partition, so "all users" docs (ingested under
-                    # SHARED_USER_ID) are retrieved alongside personal ones.
                     should = [
                         FieldCondition(key=k, match=MatchValue(value=v)),
                         FieldCondition(key=k, match=MatchValue(value=SHARED_USER_ID)),
                     ]
                 else:
                     must.append(FieldCondition(key=k, match=MatchValue(value=v)))
-            # With `should`, Qdrant requires >=1 of the OR conditions to match;
-            # any other filters stay as `must` (AND).
             qdrant_filter = Filter(must=must or None, should=should)
 
         try:
@@ -497,7 +533,17 @@ class RAGHandle:
                 limit=self._cfg.top_k,
                 score_threshold=self._cfg.score_threshold,
             ).points
-        except Exception:
+        except Exception as e:  # noqa: BLE001
+            if collection not in self._warned_collections:
+                self._warned_collections.add(collection)
+                print(
+                    f"[RAGHandle] WARNING: search on '{collection}' failed — "
+                    f"{type(e).__name__}: {e}"
+                )
+                print(
+                    "[RAGHandle]          answering without document context "
+                    "from now on (logged once)"
+                )
             results = []
         return [
             {
@@ -576,11 +622,8 @@ class RAGHandle:
                 "Don't speak about the sources, just use them to answer."
             )
 
-        # Final line the model reads before generating — the highest-compliance
-        # slot for a formatting rule. open-mistral-nemo skips the persona-level
-        # no-Ah/Oh rule often enough that we restate it right at the tail.
         user_prompt += (
-            '\n\nStart your answer straight on the substance — do not open with '
+            "\n\nStart your answer straight on the substance — do not open with "
             '"Ah" or "Oh".'
         )
 
@@ -589,29 +632,42 @@ class RAGHandle:
     async def _stream_ollama(
         self, messages: list, max_tokens: int, temperature: float = 0.7
     ) -> AsyncGenerator[str, None]:
-        async with self._llm_client.stream(
-            "POST",
-            f"{self._cfg.llm_url}/api/chat",
-            json={
-                "model": self._cfg.llm_model,
-                "messages": messages,
-                "stream": True,
-                "options": {"num_predict": max_tokens, "temperature": temperature},
-            },
-        ) as resp:
-            resp.raise_for_status()
-            async for line in resp.aiter_lines():
-                if not line:
-                    continue
-                try:
-                    chunk = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
-                delta = chunk.get("message", {}).get("content", "")
-                if delta:
-                    yield delta
-                if chunk.get("done"):
-                    return
+        url = f"{self._cfg.llm_url}/api/chat"
+        payload = {
+            "model": self._cfg.llm_model,
+            "messages": messages,
+            "stream": True,
+            "options": {"num_predict": max_tokens, "temperature": temperature},
+        }
+        attempts = self._cfg.llm_retries
+        for attempt in range(1, attempts + 1):
+            yielded_any = False
+            try:
+                async with self._llm_client.stream("POST", url, json=payload) as resp:
+                    resp.raise_for_status()
+                    async for line in resp.aiter_lines():
+                        if not line:
+                            continue
+                        try:
+                            chunk = json.loads(line)
+                        except json.JSONDecodeError:
+                            continue
+                        delta = chunk.get("message", {}).get("content", "")
+                        if delta:
+                            yielded_any = True
+                            yield delta
+                        if chunk.get("done"):
+                            return
+                return
+            except _RETRIABLE_EXC as e:
+                if yielded_any or attempt == attempts:
+                    raise
+                delay = self._cfg.retry_base_delay * (2 ** (attempt - 1))
+                print(
+                    f"[RAG] LLM stream connect to {url} failed "
+                    f"(attempt {attempt}/{attempts}): {e!r} — retrying in {delay:.1f}s"
+                )
+                await asyncio.sleep(delay)
 
     async def _stream_openai_compatible(
         self,
@@ -624,34 +680,49 @@ class RAGHandle:
         headers = {"Content-Type": "application/json"}
         if api_key:
             headers["Authorization"] = f"Bearer {api_key}"
-        async with self._llm_client.stream(
-            "POST",
-            url,
-            headers=headers,
-            json={
-                "model": self._cfg.llm_model,
-                "messages": messages,
-                "max_tokens": max_tokens,
-                "temperature": temperature,
-                "stream": True,
-            },
-        ) as resp:
-            resp.raise_for_status()
-            async for line in resp.aiter_lines():
-                if not line or not line.startswith("data:"):
-                    continue
-                payload = line[len("data:") :].strip()
-                if payload == "[DONE]":
-                    return
-                try:
-                    chunk = json.loads(payload)
-                except json.JSONDecodeError:
-                    continue
-                delta = (
-                    chunk.get("choices", [{}])[0].get("delta", {}).get("content", "")
+        body = {
+            "model": self._cfg.llm_model,
+            "messages": messages,
+            "max_tokens": max_tokens,
+            "temperature": temperature,
+            "stream": True,
+        }
+        attempts = self._cfg.llm_retries
+        for attempt in range(1, attempts + 1):
+            yielded_any = False
+            try:
+                async with self._llm_client.stream(
+                    "POST", url, headers=headers, json=body
+                ) as resp:
+                    resp.raise_for_status()
+                    async for line in resp.aiter_lines():
+                        if not line or not line.startswith("data:"):
+                            continue
+                        data = line[len("data:") :].strip()
+                        if data == "[DONE]":
+                            return
+                        try:
+                            chunk = json.loads(data)
+                        except json.JSONDecodeError:
+                            continue
+                        delta = (
+                            chunk.get("choices", [{}])[0]
+                            .get("delta", {})
+                            .get("content", "")
+                        )
+                        if delta:
+                            yielded_any = True
+                            yield delta
+                return
+            except _RETRIABLE_EXC as e:
+                if yielded_any or attempt == attempts:
+                    raise
+                delay = self._cfg.retry_base_delay * (2 ** (attempt - 1))
+                print(
+                    f"[RAG] LLM stream connect to {url} failed "
+                    f"(attempt {attempt}/{attempts}): {e!r} — retrying in {delay:.1f}s"
                 )
-                if delta:
-                    yield delta
+                await asyncio.sleep(delay)
 
     async def _llm_stream(
         self,
@@ -695,7 +766,11 @@ class RAGHandle:
         print(f"[RAG] Question: {query.question}")
 
         collection, filters = self._resolve_user_context(query._user_id)
-        query_vector = await self._embed(query.question)
+        try:
+            query_vector = await self._embed(query.question)
+        except Exception:
+            print(f"[RAG] FAILED during embedding:\n{traceback.format_exc()}")
+            raise
 
         try:
             chunks = self._search(self._qdrant, query_vector, collection, filters)
@@ -774,15 +849,10 @@ class RAG(ModuleWithHandle, ModuleWithId):
         if persona:
             self.preferences["persona"] = persona
 
-        # Per-session conversation memory, kept on the (per-WebSocket) module
-        # instance because the RAGHandle deployment is stateless/shared.
-        # Stored as OpenAI-style messages; trimmed to the last N turns.
         self._max_history_turns = max_history_turns
         self.history: list[dict] = []
 
-    async def process(  # type: ignore[override]
-        self, data: RAGQuestion
-    ) -> AsyncGenerator[Token, None]:
+    async def process(self, data: RAGQuestion) -> AsyncGenerator[Token, None]:
         """
         Called when a "question" event arrives through the event bus.
         Packages _user_id + question, sends to the stateless RAGHandle.
@@ -816,9 +886,6 @@ class RAG(ModuleWithHandle, ModuleWithId):
         max_msgs = self._max_history_turns * 2
         if len(self.history) > max_msgs:
             del self.history[:-max_msgs]
-
-    def update_preferences(self, new_preferences: dict):
-        self.preferences.update(new_preferences)
 
     async def finalize(self) -> None:
         """Called when the session ends — persist this conversation as a memory."""

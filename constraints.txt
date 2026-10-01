@@ -10,3 +10,27 @@
 # google-api-core / googleapis-common-protos / proto-plus / opentelemetry-proto /
 # google-cloud-storage, so it satisfies the whole dependency graph.
 protobuf==4.25.8
+
+# fastapi: Ray Serve's @serve.ingress does pickle_dumps(app) to check the ASGI
+# app is serializable. FastAPI 0.139.2 added a threading.Lock to its internal
+# route-cache dataclass, so that check now fails with
+#   TypeError: cannot pickle '_thread.lock' object
+# on every FastAPI app, even a bare one. No fix released yet.
+# https://github.com/ray-project/ray/issues/64939
+fastapi<0.139.2
+
+# setuptools: pkg_resources was removed outright in setuptools 82.0.0
+# (2026-02-08). webrtcvad==2.0.10 still does `import pkg_resources` at import
+# time, so anything newer breaks STT startup with
+#   ModuleNotFoundError: No module named 'pkg_resources'
+setuptools<82
+
+# lint toolchain: the `lint` job installs these on their own (deliberately
+# without requirements.txt, so it needs neither ray nor torch). Unpinned it
+# resolved to mypy 2.3.1 / black 26.5.1 / isort 9.0.1 while the project pins
+# 1.20.2 / 26.3.1 / 8.0.1 -- and the newer mypy reported still-needed
+# `type: ignore[union-attr]`s in rag.py and text_to_speech.py as unused.
+# Keep these in step with requirements.txt.
+black==26.3.1
+isort==8.0.1
+mypy==1.20.2

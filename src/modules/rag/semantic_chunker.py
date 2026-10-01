@@ -58,7 +58,7 @@ class SemanticChunker:
 
         combined = self._combine_with_buffer(sentences)
         embeddings = self.model.encode(combined, normalize_embeddings=True)
-        similarities = self._calculate_similarities(embeddings.numpy())
+        similarities = self._calculate_similarities(np.asarray(embeddings))
         breakpoints = self._find_breakpoints(similarities)
         chunks = self._create_chunks(sentences, breakpoints)
 
@@ -80,7 +80,7 @@ class SemanticChunker:
 
         combined = self._combine_with_buffer(sentences)
         embeddings = self.model.encode(combined, normalize_embeddings=True)
-        similarities = self._calculate_similarities(embeddings.numpy())
+        similarities = self._calculate_similarities(np.asarray(embeddings))
         breakpoints = self._find_breakpoints(similarities)
 
         chunks = []

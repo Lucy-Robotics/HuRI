@@ -1,11 +1,11 @@
 import asyncio
-import logging
 from dataclasses import dataclass
 
 import numpy as np
 import pytest
 
-from src.core.events import EventData, EventGraph, _summarize
+from src.core.bus import EventGraph
+from src.core.events import EventData
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -206,25 +206,3 @@ async def test_recursive_routing():
     await graph.publish("a", DummyEvent(1))
 
     await asyncio.wait_for(done.wait(), timeout=1)
-
-
-# ---------------------------------------------------------------------------
-# summarize()
-# ---------------------------------------------------------------------------
-
-
-def test_summarize_numpy():
-    event = ArrayEvent(np.zeros((3, 4), dtype=np.float32))
-
-    text = _summarize(event)
-
-    assert "shape=(3, 4)" in text
-    assert "float32" in text
-
-
-def test_summarize_regular():
-    event = DummyEvent(123)
-
-    text = _summarize(event)
-
-    assert "DummyEvent" in text

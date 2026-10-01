@@ -1,7 +1,7 @@
 import asyncio
 import os
 from concurrent.futures import ThreadPoolExecutor
-from typing import List, Optional
+from typing import AsyncGenerator, List
 
 import numpy as np
 from ray import serve
@@ -13,10 +13,16 @@ from .events import Transcript, Voice
 
 _MODEL_PATH = os.environ.get("HURI_STT_MODEL_PATH", "base")
 _NUM_WORKERS = int(os.environ.get("HURI_STT_NUM_WORKERS", "2"))
+# Set by the generated Serve config (scripts/install_local.sh) from the install
+# plan's STT decision, already translated into faster-whisper's vocabulary:
+# "cpu" | "cuda" | "auto" for the device, "int8"/"float16"/"auto" for the type.
+# Defaulting to "auto" here keeps the hand-written configs in config/ working.
+_DEVICE = os.environ.get("HURI_STT_DEVICE", "auto")
+_COMPUTE_TYPE = os.environ.get("HURI_STT_COMPUTE_TYPE", "auto")
 
 
-@serve.deployment(name="STT", max_ongoing_requests=8)
-class STTDeployment:
+@serve.deployment(name="STTHandle", max_ongoing_requests=8)
+class STTHandle:
     """faster-whisper model wrapper.
 
     Holds the WhisperModel and runs transcription on its own Ray Serve actor,
@@ -36,8 +42,8 @@ class STTDeployment:
     def __init__(
         self,
         model: str = _MODEL_PATH,
-        device: str = "auto",
-        compute_type: str = "auto",
+        device: str = _DEVICE,
+        compute_type: str = _COMPUTE_TYPE,
         num_workers: int = _NUM_WORKERS,
     ):
         from faster_whisper import WhisperModel
@@ -85,7 +91,7 @@ class STT(ModuleWithHandle):
     Transcribe voice using Faster_Whisper.
 
     Holds the per-session sliding-window buffer and delegates the actual
-    transcription to a handle-backed STTDeployment, so the Whisper model runs
+    transcription to a handle-backed STTHandle, so the Whisper model runs
     off the HuRI master node.
 
     input: voice,
@@ -99,7 +105,7 @@ class STT(ModuleWithHandle):
     :transcribe_step: overlap between consecutive transcription windows (in s).
     """
 
-    _handle_cls = STTDeployment
+    _handle_cls = STTHandle
     input_type = "voice"
     output_type = "transcript"
 
@@ -122,70 +128,81 @@ class STT(ModuleWithHandle):
         self.step_size: int = int(transcribe_step / block_duration)
 
         self.buffer: List[np.ndarray] = []
-
-        self.silence: bool = True
+        # Number of leading frames in `buffer` already covered by a previous
+        # transcription (the overlap kept when the window slides). Frames past
+        # it are audio Whisper has not heard yet.
+        self._covered: int = 0
 
         self.running = False
         self.lock: asyncio.Lock = asyncio.Lock()
 
-        # Whether we've transcribed some non-empty speech during the CURRENT
-        # utterance. Guards the end-of-turn reset (in process()) against a stray
-        # noise blip that transcribes to "" being mistaken for a finished turn.
-        # It is cleared when the turn ends, so the session handles continuous
-        # back-to-back turns rather than latching shut after the first one.
-        self._heard_speech: bool = False
+        # Set when the end of the voice is received. Remembered if a
+        # transcription is in flight, so that call handles it once it finishes.
+        self._end_requested: bool = False
 
-    async def process(self, voice: Voice) -> Optional[Transcript]:
-        if voice.data is None:
-            self.silence = True
-        else:
-            self.silence = False
-            async with self.lock:
-                self.buffer.append(voice.data)
-
+    async def process(self, voice: Voice) -> AsyncGenerator[Transcript, None]:
         async with self.lock:
+            if voice.data is None:
+                self._end_requested = True
+            else:
+                self.buffer.append(voice.data)
             if self.running:
-                return None
+                return
             self.running = True
 
-        async with self.lock:
-            buffer_size = len(self.buffer)
-            if buffer_size == 0 or (
-                self.silence is False and buffer_size < self.window_size
-            ):
-                self.running = False
-                return None
-            processing_chunks = self.buffer[: self.window_size]
-
-        processing_audio = np.concatenate(processing_chunks, axis=0)
-
-        current_text = await self._handle.transcribe.remote(
-            processing_audio, self.language
-        )
-
-        processed_size = self.window_size - self.step_size
-        async with self.lock:
+        try:
+            async for transcript in self._transcribe_pending():
+                yield transcript
+        finally:
             self.running = False
 
-            # Track that we've heard actual speech this turn (guards the reset
-            # below against a stray noise blip that transcribes to "").
-            if current_text:
-                self._heard_speech = True
+    async def _transcribe_pending(self) -> AsyncGenerator[Transcript, None]:
+        """Run transcriptions until there is nothing left to do.
 
-            if self.silence and self._heard_speech:
-                # End of a real utterance. This Transcript carries end=True, so
-                # TAG/QAG emit the finished question downstream. Reset per-turn
-                # state so the NEXT utterance is fully independent: drop the
-                # residual sliding-window frames (they would otherwise be
-                # re-transcribed as a phantom continuation of this turn) and clear
-                # the speech flag. The client mutes the mic while the avatar
-                # responds (half-duplex), so its own TTS can't echo back and open
-                # a spurious turn — which is what the old single-turn latch was
-                # working around.
-                self.buffer = []
-                self._heard_speech = False
-            else:
-                # Mid-utterance: slide the window forward, keeping the overlap.
-                self.buffer = self.buffer[processed_size:]
+        Loops so that an end-of-turn that arrives while a window is being
+        transcribed is handled right after it, in this same call. Each pass is
+        yielded as its own Transcript.
+        """
 
-        return Transcript(current_text, self.silence)
+        while True:
+            async with self.lock:
+                end = self._end_requested
+                if end:
+                    self._end_requested = False
+                    chunks = list(self.buffer)
+                    if len(chunks) <= self._covered:
+                        # Nothing new since the last window (only the already
+                        # transcribed overlap is left): re-running Whisper on it
+                        # would only repeat itself or invite hallucinations.
+                        self.buffer = []
+                        self._covered = 0
+                        chunks = []
+                else:
+                    if len(self.buffer) < self.window_size:
+                        return
+                    chunks = self.buffer[: self.window_size]
+
+            if end and not chunks:
+                yield Transcript("", True)
+                return
+
+            audio = np.concatenate(chunks, axis=0)
+            text = await self._handle.transcribe.remote(audio, self.language)
+
+            async with self.lock:
+                if end:
+                    # Whole remaining buffer was transcribed: reset per-turn
+                    # state so the NEXT utterance is independent. Frames that
+                    # arrived during the await belong to the next turn.
+                    self.buffer = self.buffer[len(chunks) :]
+                    self._covered = 0
+                else:
+                    # Mid-utterance: slide the window forward, keeping the
+                    # overlap.
+                    processed = self.window_size - self.step_size
+                    self.buffer = self.buffer[processed:]
+                    self._covered = max(0, len(chunks) - processed)
+
+            yield Transcript(text, end)
+            if not self._end_requested:
+                return

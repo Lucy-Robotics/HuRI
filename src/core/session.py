@@ -1,6 +1,6 @@
 from typing import List
 
-from .events import EventGraph
+from .bus import EventGraph
 from .module import Module
 
 
