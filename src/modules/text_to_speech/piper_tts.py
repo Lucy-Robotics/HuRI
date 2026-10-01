@@ -15,11 +15,11 @@ which is why it is the default. CosyVoice stays selectable with
 ``HURI_TTS_ENGINE=cosyvoice`` when an NVIDIA GPU is present and the cloned
 voice matters more than latency.
 
-The public surface is deliberately identical to ``TTSDeployment`` —
+The public surface is deliberately identical to ``TTSHandle`` —
 ``get_sample_rate`` / ``start_session`` / ``push_text`` / ``stream_audio`` — so
 ``TTS`` (the per-session module) and the generated Serve config work with
-either engine unchanged. Both are registered as ``name="TTS"`` so a config's
-``deployments: - name: TTS`` block matches whichever is bound.
+either engine unchanged. Both are registered as ``name="TTSHandle"`` so a config's
+``deployments: - name: TTSHandle`` block matches whichever is bound.
 """
 
 import asyncio
@@ -44,8 +44,8 @@ _BOUNDARY = re.compile(r"[.!?…]['\"\)\]]?\s")
 _MIN_FLUSH_CHARS = 24
 
 
-@serve.deployment(name="TTS")
-class PiperTTSDeployment:
+@serve.deployment(name="TTSHandle")
+class PiperTTSHandle:
     """Piper wrapper with per-session incremental synthesis.
 
     Stateless across sessions apart from the per-session text buffer: the ONNX
@@ -149,7 +149,7 @@ class PiperTTSDeployment:
             while True:
                 phrase = await queue.get()
                 if phrase is None:
-                    # Zero-length end marker, matching TTSDeployment's contract.
+                    # Zero-length end marker, matching TTSHandle's contract.
                     yield Audio(
                         data=np.zeros(0, dtype=np.float32),
                         sample_rate=self._sample_rate,

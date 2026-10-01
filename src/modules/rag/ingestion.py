@@ -5,7 +5,7 @@ import sys
 import uuid
 from datetime import datetime
 from pathlib import Path
-from typing import Any, List
+from typing import TYPE_CHECKING, Any, List
 
 import httpx
 import numpy as np
@@ -18,6 +18,9 @@ from qdrant_client.models import (
     PointStruct,
     VectorParams,
 )
+
+if TYPE_CHECKING:
+    from sentence_transformers import SentenceTransformer
 
 USER_ID_FILE = os.path.expanduser("~/.huri_user_id")
 
@@ -523,6 +526,7 @@ def main():
 
     # Lazy-load the model only if the command needs embeddings.
     # Commands that don't need it: list, delete, profile (doesn't use embeddings).
+    model: RemoteEmbedder | SentenceTransformer | None
     needs_embeddings = args.command in ("pdf", "text", "write", "profile")
 
     if needs_embeddings:

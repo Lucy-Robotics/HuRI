@@ -195,9 +195,9 @@ no Ollama/Qdrant is installed for it, and it costs no local VRAM/RAM)
       --force-gesture     Keep gesture generation even when it lands on CPU
       --force-emo         Keep prosody/emotion even when RAM is tight
       --modules LIST      Explicit module allow-list instead of the planned one,
-                          e.g. --modules mic,stt,tag,qag,rag  (text pipeline) or
+                          e.g. --modules vad,stt,tag,qag,rag  (text pipeline) or
                           --modules rag (text in, text out). Subset of:
-                          mic,stt,tag,emo,eag,qag,rag,tts,gesture
+                          vad,stt,tag,emo,eag,qag,rag,tts,mov
       --stt-device D      gpu | cpu — override where speech-to-text runs
 
 Install
@@ -915,10 +915,10 @@ plan() {
   fi
 
   # --- Module allow-list (HURI_MODULES) -------------------------------------
-  local mods=("mic" "stt" "tag" "qag" "rag")
+  local mods=("vad" "stt" "tag" "qag" "rag")
   [[ "$P_EMO_DEV" != "off" ]] && mods+=("emo" "eag")
   [[ "$P_TTS_DEV" != "off" ]] && mods+=("tts")
-  [[ "$P_GES_DEV" != "off" && "$P_TTS_DEV" != "off" ]] && mods+=("gesture")
+  [[ "$P_GES_DEV" != "off" && "$P_TTS_DEV" != "off" ]] && mods+=("mov")
   if [[ "$P_GES_DEV" != "off" && "$P_TTS_DEV" == "off" ]]; then
     P_GES_DEV="off"; P_GES_WHY="gesture is driven by TTS audio, which is disabled"
   fi
@@ -941,7 +941,7 @@ plan() {
   fi
 
   if [[ -n "$MODULES_OVERRIDE" ]]; then
-    local known="mic stt tag emo eag qag rag tts gesture" m bad=()
+    local known="vad stt tag emo eag qag rag tts mov" m bad=()
     local -a wanted=()
     IFS=',' read -r -a wanted <<<"$MODULES_OVERRIDE"
     for m in "${wanted[@]}"; do
@@ -956,7 +956,7 @@ plan() {
     if [[ ",$P_MODULES," != *",tts,"* && "$P_TTS_DEV" != "off" ]]; then
       P_TTS_DEV="off"; P_TTS_WHY="not in --modules"
     fi
-    if [[ ",$P_MODULES," != *",gesture,"* && "$P_GES_DEV" != "off" ]]; then
+    if [[ ",$P_MODULES," != *",mov,"* && "$P_GES_DEV" != "off" ]]; then
       P_GES_DEV="off"; P_GES_WHY="not in --modules"
     fi
     if [[ ",$P_MODULES," != *",emo,"* && "$P_EMO_DEV" != "off" ]]; then
@@ -1082,7 +1082,7 @@ report_plan() {
   row "stt"     "faster-whisper $STT_SIZE" "$P_STT_DEV" "$stt_budget" "$P_STT_WHY"
   row "rag/llm" "$llm_backend"             "$P_LLM_DEV" "$llm_budget" "$P_LLM_WHY"
   row "tts"     "$tts_backend"          "$P_TTS_DEV" "$tts_budget" "$P_TTS_WHY"
-  row "gesture" "EMAGE audio"              "$P_GES_DEV" "$ges_budget" "$P_GES_WHY"
+  row "mov"     "EMAGE audio"              "$P_GES_DEV" "$ges_budget" "$P_GES_WHY"
   row "emo"     "hubert-large-superb-er"   "$P_EMO_DEV" "$emo_budget" "$P_EMO_WHY"
   row "embed"   "$embed_backend"           "$P_EMBED_DEV" \
       "$([[ "$P_EMBED_DEV" == "gpu" ]] && echo "$(mb_to_gb $VRAM_EMBED) GiB vram" || echo "-")" \
@@ -1852,7 +1852,7 @@ generate_configs() {
 #   stt      $P_STT_DEV   — $P_STT_WHY
 #   rag/llm  $P_LLM_DEV   — $P_LLM_WHY
 #   tts      $P_TTS_DEV   — $P_TTS_WHY
-#   gesture  $P_GES_DEV   — $P_GES_WHY
+#   mov      $P_GES_DEV   — $P_GES_WHY
 #   emo      $P_EMO_DEV   — $P_EMO_WHY
 
 proxy_location: EveryNode
@@ -1958,7 +1958,7 @@ EOF
           num_cpus: 1
           num_gpus: 0
 
-      - name: STT
+      - name: STTHandle
         num_replicas: 1
         ray_actor_options:
           num_cpus: 1
@@ -1985,16 +1985,26 @@ EOF
     if [[ "$P_TTS_DEV" != "off" ]]; then
       cat <<EOF
 
-      - name: TTS
+      - name: TTSHandle
         ray_actor_options:
           num_cpus: 1
           num_gpus: $P_TTS_FRAC
 EOF
     fi
+    if [[ "$P_EMO_DEV" != "off" ]]; then
+      cat <<EOF
+
+      - name: EMOHandle
+        num_replicas: 1
+        ray_actor_options:
+          num_cpus: 1
+          num_gpus: 0
+EOF
+    fi
     if [[ "$P_GES_DEV" != "off" ]]; then
       cat <<EOF
 
-      - name: GestureGeneration
+      - name: MOVHandle
         ray_actor_options:
           num_cpus: 1
           num_gpus: $P_GES_FRAC
@@ -2010,7 +2020,7 @@ EOF
   if (( ! DRY_RUN )); then
     while IFS=$'\t' read -r k v; do
       # Double-quoted, not %q: `printf %q` emits shell-escaped forms such as
-      # mic\,stt\,tag, which `source` handles but no dotenv parser does — and
+      # vad\,stt\,tag, which `source` handles but no dotenv parser does — and
       # env.sh advertises this file as a .env. Values here are paths and
       # comma-separated lists, so escaping " and \ is sufficient.
       v="${v//\\/\\\\}"; v="${v//\"/\\\"}"
@@ -2072,8 +2082,8 @@ EOF
     fi
     echo
     echo "modules:"
-    echo "  mic:"
-    echo "    name: mic"
+    echo "  vad:"
+    echo "    name: vad"
     echo "    args:"
     echo "      vad_agressiveness: 3"
     echo "      silence_duration: 1.5"
@@ -2087,6 +2097,8 @@ EOF
     echo "    logging: INFO"
     echo "  tag:"
     echo "    name: tag"
+    echo "    args:"
+    echo "      min_prefix: 3"
     echo "    logging: INFO"
     if [[ "$P_EMO_DEV" != "off" ]]; then
       echo "  emo:"
@@ -2126,8 +2138,8 @@ EOF
       echo "    logging: INFO"
     fi
     if [[ "$P_GES_DEV" != "off" ]]; then
-      echo "  gesture:"
-      echo "    name: gesture"
+      echo "  mov:"
+      echo "    name: mov"
       echo "    logging: INFO"
     fi
   } | write_file "$client_cfg"
@@ -2456,11 +2468,11 @@ verify() {
   }
 
   # ctranslate2 is the actual STT engine (faster-whisper is a thin wrapper) and
-  # webrtcvad/sounddevice are the fragile MIC deps — one builds from sdist, the
+  # webrtcvad/sounddevice are the fragile VAD deps — one builds from sdist, the
   # other dlopens libportaudio. All three were missing from this list, which is
   # why an install could "succeed" with a dead speech pipeline.
   local checks="ray,faster_whisper,ctranslate2,qdrant_client,httpx,numpy,webrtcvad"
-  [[ "$P_MODULES" == *mic* ]] && checks="$checks,sounddevice,scipy,omegaconf"
+  [[ "$P_MODULES" == *vad* ]] && checks="$checks,sounddevice,scipy,omegaconf"
   [[ "$GPU_VENDOR" != "none" || "$P_TTS_DEV" != "off" || "$P_GES_DEV" != "off" || "$P_EMO_DEV" != "off" ]] \
     && checks="$checks,torch"
 
@@ -2630,7 +2642,7 @@ PY
     # will be, and every TTS session will fail per-request (each error is
     # logged but swallowed by the event graph, so the client just gets no
     # audio — see src/core/events.py::EventGraph._run). Treat it as a hard
-    # requirement rather than the best-effort skip TTSDeployment allows.
+    # requirement rather than the best-effort skip TTSHandle allows.
     if [[ -f "$ASSETS_DIR/voice.wav" ]]; then
       ok "voice sample present at $ASSETS_DIR/voice.wav"
     else

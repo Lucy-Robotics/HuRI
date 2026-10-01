@@ -38,13 +38,13 @@ documented at the bottom for people who need it.
 The installer installs the system packages itself; you only need Python, a
 package manager it recognises (`apt`, `pacman`, `dnf`, `zypper`) and `sudo`.
 
-| | Requirement |
-| --- | --- |
-| Python | **3.10 – 3.12** (3.12 recommended; 3.13+ is not supported yet — `numpy 1.26` has no wheels for it) |
-| Disk | ~8 GiB for the default voice pipeline, ~20 GiB with CosyVoice TTS |
-| RAM | ~16 GiB for the default plan; the installer refuses a plan that will not fit |
-| Network | huggingface.co (models) and the Ollama/PyPI mirrors |
-| Optional | An input device if you want speech in, a GPU for faster STT |
+|          | Requirement                                                                                        |
+| -------- | -------------------------------------------------------------------------------------------------- |
+| Python   | **3.10 – 3.12** (3.12 recommended; 3.13+ is not supported yet — `numpy 1.26` has no wheels for it) |
+| Disk     | ~8 GiB for the default voice pipeline, ~20 GiB with CosyVoice TTS                                  |
+| RAM      | ~16 GiB for the default plan; the installer refuses a plan that will not fit                       |
+| Network  | huggingface.co (models) and the Ollama/PyPI mirrors                                                |
+| Optional | An input device if you want speech in, a GPU for faster STT                                        |
 
 Ubuntu 24.04:
 
@@ -76,14 +76,14 @@ Qdrant are installed and started too unless you point at remote ones.
 The installer probes the machine and runs the largest pipeline that actually
 works on it. Nothing here is aspirational — these are measured outcomes:
 
-| Module | CPU only | NVIDIA | AMD / ROCm |
-| --- | --- | --- | --- |
-| **STT** (faster-whisper) | ✅ `int8`, realtime for `base` | ✅ `float16` | ✅ `float16` |
-| **TTS — piper** (default without an NVIDIA GPU) | ✅ **~30x faster than realtime** | ✅ | ✅ (runs on CPU; it does not need a GPU) |
-| **TTS — cosyvoice** (default on NVIDIA with ≥4.4 GiB free) | ⚠️ ~7x *slower* than realtime | ✅ `fp16` | ❌ vocoder faults in a MIOpen convolution |
-| **RAG / LLM** (Ollama) | ✅ tier picked from free RAM | ✅ | ✅ |
-| **EMO** (prosody) | ✅ always CPU | ✅ | ✅ |
-| **MOV / gesture** (EMAGE) | ❌ slower than realtime | ✅ | ❌ not in the ROCm build |
+| Module                                                     | CPU only                         | NVIDIA       | AMD / ROCm                                |
+| ---------------------------------------------------------- | -------------------------------- | ------------ | ----------------------------------------- |
+| **STT** (faster-whisper)                                   | ✅ `int8`, realtime for `base`   | ✅ `float16` | ✅ `float16`                              |
+| **TTS — piper** (default without an NVIDIA GPU)            | ✅ **~30x faster than realtime** | ✅           | ✅ (runs on CPU; it does not need a GPU)  |
+| **TTS — cosyvoice** (default on NVIDIA with ≥4.4 GiB free) | ⚠️ ~7x _slower_ than realtime    | ✅ `fp16`    | ❌ vocoder faults in a MIOpen convolution |
+| **RAG / LLM** (Ollama)                                     | ✅ tier picked from free RAM     | ✅           | ✅                                        |
+| **EMO** (prosody)                                          | ✅ always CPU                    | ✅           | ✅                                        |
+| **MOV / gesture** (EMAGE)                                  | ❌ slower than realtime          | ✅           | ❌ not in the ROCm build                  |
 
 So **a machine with no GPU at all still gets voice in and voice out** — that is
 the point of Piper being the default. A GPU buys faster STT, and on NVIDIA it
@@ -94,7 +94,7 @@ additionally unlocks CosyVoice and gesture generation.
 The plan is a starting point, not a cage.
 
 ```sh
-# Only the modules you name (subset of mic,stt,tag,emo,eag,qag,rag,tts,gesture)
+# Only the modules you name (subset of vad,stt,tag,emo,eag,qag,rag,tts,mov)
 scripts/install_local.sh --modules mic,stt,tag,qag,rag    # voice in, text out
 scripts/install_local.sh --modules rag                    # text in, text out
 
@@ -124,15 +124,15 @@ the model weights, Qdrant and Ollama, plus a Ray Serve config matching the plan.
 
 It generates:
 
-| Path | What |
-| --- | --- |
-| `config/huri_local.generated.yaml` | Ray Serve config for this machine |
-| `config/client_local.generated.yaml` | matching client config |
-| `.huri-local/huri.env` | the same runtime env vars as a plain `.env` |
-| `.huri-local/secrets.env` | LLM API key, `0600`, never in the configs |
-| `.huri-local/env.sh` | venv + `huri.env` + `secrets.env` in one `source` |
-| `.huri-local/start.sh` / `stop.sh` / `status.sh` | run the stack |
-| `.huri-local/plan.env` | the hardware plan it acted on |
+| Path                                             | What                                              |
+| ------------------------------------------------ | ------------------------------------------------- |
+| `config/huri_local.generated.yaml`               | Ray Serve config for this machine                 |
+| `config/client_local.generated.yaml`             | matching client config                            |
+| `.huri-local/huri.env`                           | the same runtime env vars as a plain `.env`       |
+| `.huri-local/secrets.env`                        | LLM API key, `0600`, never in the configs         |
+| `.huri-local/env.sh`                             | venv + `huri.env` + `secrets.env` in one `source` |
+| `.huri-local/start.sh` / `stop.sh` / `status.sh` | run the stack                                     |
+| `.huri-local/plan.env`                           | the hardware plan it acted on                     |
 
 ```sh
 .huri-local/start.sh                 # services + ray head + serve deploy
@@ -144,7 +144,7 @@ python -m src.client --config config/client_local.generated.yaml
 
 `start.sh` waits for the application to report `RUNNING` and exits non-zero with
 the replica errors if it does not, so a failed deploy is never reported as
-success. `status.sh` reads the *application* status, not the HTTP proxy's health
+success. `status.sh` reads the _application_ status, not the HTTP proxy's health
 route (which is green even when every deployment is dead).
 
 `source .huri-local/env.sh` gives a shell configured exactly like a Serve
@@ -206,14 +206,14 @@ then restart (`.huri-local/stop.sh && .huri-local/start.sh`).
 
 ## Troubleshooting
 
-| Symptom | Cause / fix |
-| --- | --- |
-| `Task was killed due to the node running low on memory` | The plan did fit but Ollama's KV cache grew. Use a smaller tier: `--llm-model mistral:7b`, and `ollama stop <big-model>`. |
-| `torch sees the GPU but cannot launch a kernel on it` | The torch build has no code objects for your GPU. `--only config` sets `HSA_OVERRIDE_GFX_VERSION` when a compatible same-family arch exists; otherwise run CPU-only. |
-| Client exits with `session_error: Unknown module 'x'` | The client config lists a module the server did not register. Match it to `HURI_MODULES`, or regenerate both with `--only config`. |
-| `qdrant is not answering … HuRI does not manage this instance` | Something else already owned the port when you installed, so HuRI never created its own. Start it yourself, or free the port and re-run `--only services`. |
-| No audio from the client | Check TTS is actually enabled (`grep HURI_MODULES config/huri_local.generated.yaml`) — with `--modules` or a dropped plan there may be no TTS at all. |
-| Install fails with no explanation | Every command's output is in `.huri-local/install.log`, and the error line names the real command. |
+| Symptom                                                        | Cause / fix                                                                                                                                                          |
+| -------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Task was killed due to the node running low on memory`        | The plan did fit but Ollama's KV cache grew. Use a smaller tier: `--llm-model mistral:7b`, and `ollama stop <big-model>`.                                            |
+| `torch sees the GPU but cannot launch a kernel on it`          | The torch build has no code objects for your GPU. `--only config` sets `HSA_OVERRIDE_GFX_VERSION` when a compatible same-family arch exists; otherwise run CPU-only. |
+| Client exits with `session_error: Unknown module 'x'`          | The client config lists a module the server did not register. Match it to `HURI_MODULES`, or regenerate both with `--only config`.                                   |
+| `qdrant is not answering … HuRI does not manage this instance` | Something else already owned the port when you installed, so HuRI never created its own. Start it yourself, or free the port and re-run `--only services`.           |
+| No audio from the client                                       | Check TTS is actually enabled (`grep HURI_MODULES config/huri_local.generated.yaml`) — with `--modules` or a dropped plan there may be no TTS at all.                |
+| Install fails with no explanation                              | Every command's output is in `.huri-local/install.log`, and the error line names the real command.                                                                   |
 
 ## Usage without the installer
 
@@ -285,7 +285,7 @@ scripts/test_install.sh            # run the installer in clean Ubuntu container
 - **src/interfaces** — `cli_interface`: the reference client senders (audio,
   text) and hooks (token, audio, motion)
 - **src/modules**
-  - `speech_to_text` — `microphone_vad` (MIC), `speech_to_text` (STT),
+  - `speech_to_text` — `microphone_vad` (VAD), `speech_to_text` (STT),
     `text_aggregator` (TAG)
   - `text_to_speech` — `piper_tts` (default engine), `text_to_speech`
     (CosyVoice3 + the `TTS` module)

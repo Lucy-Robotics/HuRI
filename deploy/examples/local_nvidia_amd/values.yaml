@@ -53,12 +53,19 @@ ray:
               num_cpus: 1
               num_gpus: 0
           # STT: shared faster-whisper actor, pinned to AMD.
-          - name: STT
+          - name: STTHandle
             num_replicas: 1
             ray_actor_options:
               num_cpus: 1
               num_gpus: 0.5
               resources: {"GPU_TYPE_AMD": 0.5}
+          # EMO: shared prosody-emotion actor (CPU), pinned to AMD like STT.
+          - name: EMOHandle
+            num_replicas: 1
+            ray_actor_options:
+              num_cpus: 1
+              num_gpus: 0
+              resources: {"GPU_TYPE_AMD": 0.01}
           # RAG: embeddings (API) + LLM client. Pinned to AMD for its dependencies, no GPU needed.
           - name: RAGHandle
             num_replicas: 1
@@ -87,12 +94,12 @@ ray:
           # gesture is given the remainder. Tune these two pairs together so
           # they sum to <= 1.0. To also cap gesture's actual VRAM allocation,
           # set HURI_GESTURE_GPU_MEM_FRACTION on the nvidia worker (see below).
-          - name: TTS
+          - name: TTSHandle
             ray_actor_options:
               num_cpus: 1
               num_gpus: 0.8
               resources: {"GPU_TYPE_NVIDIA": 0.8}
-          - name: GestureGeneration
+          - name: MOVHandle
             ray_actor_options:
               num_cpus: 1
               num_gpus: 0.2
@@ -166,10 +173,10 @@ workerGroups:
         value: "compute,utility"
       - name: HF_HUB_DOWNLOAD_TIMEOUT
         value: "10"
-      # Manual GPU split for gesture (see GestureGeneration above). Caps the
+      # Manual GPU split for gesture (see MOVHandle above). Caps the
       # EMAGE process to a fraction of GPU memory so TTS keeps the rest. "0"
       # disables the cap. Keep roughly in line with its num_gpus fraction.
-      # Read by GestureGeneration, which runs in this worker group.
+      # Read by MOVHandle, which runs in this worker group.
       - name: HURI_GESTURE_GPU_MEM_FRACTION
         value: "0.2"
     # Models whose PVC will be mounted in this worker group.

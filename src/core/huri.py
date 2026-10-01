@@ -95,7 +95,6 @@ class HuRI:
             for hook_config in client_config.hooks.values()
             for topic in hook_config.topics
         ]
-
         try:
             pipeline: List[Module] = self.module_factory.create_from_config(
                 client_config.user_id, client_config.modules

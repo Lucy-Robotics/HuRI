@@ -9,8 +9,8 @@ from src.core.module import Module
 from .events import Voice
 
 
-class MIC(Module):
-    """MIC Module
+class VAD(Module):
+    """VAD Module
 
     Detect voice and silence using WebRTC VAD.
 
@@ -25,7 +25,7 @@ class MIC(Module):
     """
 
     # Inbound microphone frames travel on their own topic so the TTS-output
-    # "audio" topic (consumed by Gesture and the client Sender) never collides
+    # "audio" topic (consumed by MOV and the client Sender) never collides
     # with mic input — otherwise raw mic bytes get echoed back to the client.
     input_type = "audio.in"
     output_type = "voice"

@@ -112,7 +112,7 @@ jobs:
         run: mypy src --check-untyped-defs || true
       - name: mypy (files that are already clean must stay clean)
         # --follow-imports=silent: report only on the files listed below.
-        # modules.py imports Gesture, so mypy follows it into
+        # modules.py imports MOV, so mypy follows it into
         # gesture/emage/modeling.py and reported its 3 pre-existing
         # transformers errors against this gate. Those surface only when
         # transformers is importable, so a `type: ignore` would flip between
@@ -193,7 +193,7 @@ jobs:
           run() { echo "--- $*"; ./scripts/install_local.sh --plan-only --python "$HURI_PY" "$@" >/dev/null; }
           run --profile cpu
           run --modules rag
-          run --modules mic,stt,tag,qag,rag
+          run --modules vad,stt,tag,qag,rag
           run --stt-device cpu
           run --tts-engine cosyvoice
           run --stt-model small
@@ -258,7 +258,7 @@ jobs:
           PY
       - name: the module registry builds for representative subsets
         run: |
-          for mods in "" "rag" "mic,stt,tag,qag,rag" "mic,stt,tag,qag,rag,emo,eag,tts"; do
+          for mods in "" "rag" "vad,stt,tag,qag,rag" "vad,stt,tag,qag,rag,emo,eag,tts"; do
             HURI_MODULES="$mods" python -c "
           import os, src.modules.modules as m
           got = m.get_modules()

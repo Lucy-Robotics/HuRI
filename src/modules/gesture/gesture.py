@@ -36,15 +36,15 @@ _GPU_MEM_FRACTION = float(os.environ.get("HURI_GESTURE_GPU_MEM_FRACTION", "0.0")
 _WARMUP_SRC_SR = int(os.environ.get("HURI_GESTURE_WARMUP_SR", "24000"))
 
 
-@serve.deployment(name="GestureGeneration")
-class GestureDeployment:
+@serve.deployment(name="MOVHandle")
+class MOVHandle:
     def __init__(
         self,
         hf_repo: str = _HF_REPO,
         device: Optional[str] = None,
         gpu_mem_fraction: float = _GPU_MEM_FRACTION,
     ):
-        print("[Gesture] importing torch...")
+        print("[MOV] importing torch...")
         import torch
 
         # Pin algorithm selection so the kernels warmed below are the same ones
@@ -59,13 +59,13 @@ class GestureDeployment:
             torch.backends.cuda.matmul.allow_tf32 = True
             torch.backends.cudnn.allow_tf32 = True
 
-        print("[Gesture] importing emage...")
+        print("[MOV] importing emage...")
         from .emage import EmageAudioModel, EmageVAEConv, EmageVQModel, EmageVQVAEConv
 
         self.device = torch.device(
             device if device else ("cuda" if torch.cuda.is_available() else "cpu")
         )
-        print(f"[Gesture] device={self.device} hf_repo={hf_repo!r}")
+        print(f"[MOV] device={self.device} hf_repo={hf_repo!r}")
 
         # Manual GPU split: cap this process' share of GPU memory so the audio
         # (TTS) path keeps the rest. num_gpus in the Ray serveConfig handles
@@ -76,28 +76,28 @@ class GestureDeployment:
                     gpu_mem_fraction, self.device.index or 0
                 )
                 print(
-                    f"[Gesture] GPU memory fraction capped at {gpu_mem_fraction:.2f}",
+                    f"[MOV] GPU memory fraction capped at {gpu_mem_fraction:.2f}",
                 )
             except Exception as e:  # noqa: BLE001 — best-effort knob, never fatal
-                print(f"[Gesture] WARNING could not cap GPU memory: {e!r}")
+                print(f"[MOV] WARNING could not cap GPU memory: {e!r}")
 
-        print("[Gesture] loading face_vq...")
+        print("[MOV] loading face_vq...")
         face_vq = EmageVQVAEConv.from_pretrained(hf_repo, subfolder="emage_vq/face").to(
             self.device
         )
-        print("[Gesture] loading upper_vq...")
+        print("[MOV] loading upper_vq...")
         upper_vq = EmageVQVAEConv.from_pretrained(
             hf_repo, subfolder="emage_vq/upper"
         ).to(self.device)
-        print("[Gesture] loading lower_vq...")
+        print("[MOV] loading lower_vq...")
         lower_vq = EmageVQVAEConv.from_pretrained(
             hf_repo, subfolder="emage_vq/lower"
         ).to(self.device)
-        print("[Gesture] loading hands_vq...")
+        print("[MOV] loading hands_vq...")
         hands_vq = EmageVQVAEConv.from_pretrained(
             hf_repo, subfolder="emage_vq/hands"
         ).to(self.device)
-        print("[Gesture] loading global_ae...")
+        print("[MOV] loading global_ae...")
         global_ae = EmageVAEConv.from_pretrained(
             hf_repo, subfolder="emage_vq/global"
         ).to(self.device)
@@ -111,12 +111,12 @@ class GestureDeployment:
         )
         self.motion_vq.eval()
 
-        print("[Gesture] loading EmageAudioModel...")
+        print("[MOV] loading EmageAudioModel...")
         self.model = EmageAudioModel.from_pretrained(hf_repo).to(self.device)
         self.model.eval()
 
         self._warmup()
-        print("[Gesture] ready")
+        print("[MOV] ready")
 
     def _warmup(self) -> None:
         # The first inference pays one-time costs that are *shape- and
@@ -166,16 +166,16 @@ class GestureDeployment:
                     if self.device.type == "cuda":
                         torch.cuda.synchronize(self.device)
                     print(
-                        f"[Gesture] warmup pass {pass_idx} {s:.2f}s "
+                        f"[MOV] warmup pass {pass_idx} {s:.2f}s "
                         f"({n} samples @ {_WARMUP_SRC_SR} Hz) "
                         f"in {time.time() - ts:.2f}s",
                     )
             print(
-                f"[Gesture] warmup done ({len(secs)} shapes x2) "
+                f"[MOV] warmup done ({len(secs)} shapes x2) "
                 f"in {time.time() - t0:.2f}s",
             )
         except Exception as e:  # noqa: BLE001 — warmup is an optimisation, never fatal
-            print(f"[Gesture] WARNING warmup failed: {e!r}")
+            print(f"[MOV] WARNING warmup failed: {e!r}")
 
     def infer(self, audio_np: np.ndarray, source_sr: int = _EMAGE_SR) -> Motion:
         import torch
@@ -250,8 +250,8 @@ class GestureDeployment:
         )
 
 
-class Gesture(ModuleWithHandle):
-    """Gesture Module
+class MOV(ModuleWithHandle):
+    """MOV Module
 
     Consumes streaming Audio chunks produced by TTS and generates whole-body
     SMPL-X motion using the EMAGE audio-to-gesture model.
@@ -296,7 +296,7 @@ class Gesture(ModuleWithHandle):
     :blend_sec:    Seconds over which each window's seam is eased onto the prior frame.
     """
 
-    _handle_cls = GestureDeployment
+    _handle_cls = MOVHandle
     input_type = "audio.out"
     output_type = "motion"
 

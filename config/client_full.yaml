@@ -29,8 +29,8 @@ hooks:
     topics: [motion]
 
 modules:
-  mic:
-    name: mic
+  vad:
+    name: vad
     args:
       vad_agressiveness: 3
       silence_duration: 1.5
@@ -68,6 +68,6 @@ modules:
     # design where HuRI buffered clauses itself — CosyVoice's frontend does the
     # segmentation now.
     logging: INFO
-  gesture:
-    name: gesture
+  mov:
+    name: mov
     logging: INFO

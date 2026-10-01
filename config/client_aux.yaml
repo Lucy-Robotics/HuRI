@@ -3,12 +3,12 @@ huri_url: ws://localhost:8000/session
 interface_path: src.interfaces.cli_interface:cli_interface
 
 senders:
-  # audio:
-  #   name: audio
-  #   topic: audio.in
-  #   args:
-  #     sample_rate: 16000
-  #     frame_duration: 0.030
+  audio:
+    name: audio
+    topic: audio.in
+    args:
+      sample_rate: 16000
+      frame_duration: 0.030
   text:
     name: text
     topic: question
@@ -36,32 +36,27 @@ hooks:
     topics: [motion]
 
 modules:
-  # mic:
-  #   name: mic
-  #   args:
-  #     vad_agressiveness: 3
-  #     silence_duration: 1.5
-  #     block_duration: ${senders.audio.args.frame_duration}
-  # stt:
-  #   name: stt
-  #   args:
-  #     language: en
-  #     block_duration: ${senders.audio.args.frame_duration}
-  # tag:
-  #   name: tag
+  vad:
+    name: vad
+    args:
+      vad_agressiveness: 3
+      silence_duration: 1.5
+      block_duration: ${senders.audio.args.frame_duration}
   stt:
     name: stt
     args:
-      language: "en"
-      block_duration: 0.030
+      language: en
+      block_duration: ${senders.audio.args.frame_duration}
     logging: INFO
   tag:
     name: tag
+    args:
+      min_prefix: 3
     logging: INFO
   emo:
     name: emo
     args:
-      block_duration: 0.030
+      block_duration: ${senders.audio.args.frame_duration}
   eag:
     name: eag
   qag:
@@ -77,6 +72,6 @@ modules:
   tts:
     name: tts
     logging: INFO
-  gesture:
-    name: gesture
+  mov:
+    name: mov
     logging: INFO

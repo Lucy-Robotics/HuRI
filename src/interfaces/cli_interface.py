@@ -98,7 +98,6 @@ class AudioHook(ClientHook[Audio]):
             dtype="int16",
         )
         self.stream.start()
-
         self._stream_sr = sample_rate
         self._resample_fallback = False
 

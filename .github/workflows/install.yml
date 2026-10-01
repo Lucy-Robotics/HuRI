@@ -96,7 +96,7 @@ jobs:
           print("HURI_MODULES:", env["HURI_MODULES"])
           # Every deployment Serve is told to configure must be one the app will
           # actually build, or `serve deploy` fails the whole application.
-          expected = {"stt": "STT", "rag": "RAGHandle", "tts": "TTS", "gesture": "GestureGeneration"}
+          expected = {"stt": "STTHandle", "emo": "EMOHandle", "rag": "RAGHandle", "tts": "TTSHandle", "mov": "MOVHandle"}
           mods = set(env["HURI_MODULES"].split(","))
           for mod, dep in expected.items():
               if dep in names:
@@ -112,8 +112,8 @@ jobs:
         run: |
           ./scripts/install_local.sh -y --only config,verify \
             --profile cpu --python /usr/bin/python3 --skip-services \
-            --modules mic,stt,tag,qag,rag --llm-model qwen2.5:1.5b
-          grep -q 'HURI_MODULES: "mic,stt,tag,qag,rag"' config/huri_local.generated.yaml \
+            --modules vad,stt,tag,qag,rag --llm-model qwen2.5:1.5b
+          grep -q 'HURI_MODULES: "vad,stt,tag,qag,rag"' config/huri_local.generated.yaml \
             || { echo "::error::--modules did not reach the generated config"; exit 1; }
 
       - name: disk after

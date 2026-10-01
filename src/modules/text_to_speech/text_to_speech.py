@@ -4,7 +4,7 @@ import queue
 import sys
 import traceback
 import uuid
-from typing import AsyncGenerator, Optional
+from typing import Any, AsyncGenerator, Optional
 
 import numpy as np
 from ray import serve
@@ -43,8 +43,8 @@ _END_AUDIO = object()  # sentinel pushed into the audio queue when synth complet
 _DONE = object()  # sentinel for exhausted sync generator
 
 
-@serve.deployment(name="TTS", max_ongoing_requests=200)
-class TTSDeployment:
+@serve.deployment(name="TTSHandle", max_ongoing_requests=200)
+class TTSHandle:
     """CosyVoice3 wrapper with per-session bistream synthesis.
 
     The model's `inference_zero_shot` accepts a Python generator as `tts_text`
@@ -136,7 +136,7 @@ class TTSDeployment:
         compiles, and the caching allocator's first growth — that otherwise land
         on the first user utterance and stall it for seconds. Draining a dummy
         synth through the *real* fp16 path (same prompt, stream=True) pays them
-        upfront, mirroring the Gesture module's warmup.
+        upfront, mirroring the MOV module's warmup.
 
         Best-effort: never fatal. The reference sample (voice.wav) is uploaded to
         its PVC *after* the worker starts, so on a brand-new volume it may be
@@ -220,8 +220,8 @@ class TTSDeployment:
 def _select_engine():
     """Pick the TTS engine from HURI_TTS_ENGINE (default: piper).
 
-    Both engines are registered as Serve deployment ``name="TTS"`` and expose
-    the same four methods, so a config's ``deployments: - name: TTS`` block and
+    Both engines are registered as Serve deployment ``name="TTSHandle"`` and expose
+    the same four methods, so a config's ``deployments: - name: TTSHandle`` block and
     the ``TTS`` module below work with either one unchanged.
 
     piper (default) is ONNX-only and ~30x faster than realtime on CPU, so it
@@ -231,11 +231,11 @@ def _select_engine():
 
     engine = os.environ.get("HURI_TTS_ENGINE", "piper").strip().lower()
     if engine == "cosyvoice":
-        return TTSDeployment
+        return TTSHandle
     if engine in ("", "piper"):
-        from .piper_tts import PiperTTSDeployment
+        from .piper_tts import PiperTTSHandle
 
-        return PiperTTSDeployment
+        return PiperTTSHandle
     raise ValueError(
         f"unknown HURI_TTS_ENGINE={engine!r}; expected 'piper' or 'cosyvoice'"
     )
@@ -324,10 +324,15 @@ class TTS(ModuleWithHandle):
 
     async def _drain_audio(self, session_id: str, audio_q: asyncio.Queue) -> None:
         try:
-            response = self._handle.options(stream=True).stream_audio.remote(session_id)
+            # Any: the Ray response type differs with/without ray installed
+            # (CI lints without it), so a `type: ignore` would flip between
+            # needed and unused.
+            response: Any = self._handle.options(stream=True).stream_audio.remote(
+                session_id
+            )
             count = 0
             pts = 0.0
-            async for audio in response:  # type: ignore[union-attr]
+            async for audio in response:
                 count += 1
                 audio.pts = pts
                 pts += audio.data.shape[0] / audio.sample_rate
