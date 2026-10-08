@@ -227,3 +227,8 @@ config/*.generated.yaml
 /qdrant_storage/
 /.venv*/
 /uv.lock
+
+# Playground questionnaire answers (src/playground)
+playground_data/
+# Mouse-Man model (30 MB, from Lucy-Robotics/HuRI_website_demo, Git LFS)
+src/playground/static/avatar/

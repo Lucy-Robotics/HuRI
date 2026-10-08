@@ -266,6 +266,46 @@ pip install -c constraints.txt -r requirements-amd.txt
 
 Note that `requirements.txt` also contains the lint/test toolchain.
 
+## Playground (public demo + questionnaire)
+
+A web page where visitors talk with HuRI, then rate it with the Godspeed
+(5-point) and RoSAS (7-point) questionnaires. It runs as its own process in
+front of a running HuRI; the browser never connects to HuRI directly.
+
+```sh
+HURI_URL=ws://localhost:8000/session python -m src.playground   # http://127.0.0.1:8080
+```
+
+| Variable                     | Default                       | Meaning                                                |
+| ---------------------------- | ----------------------------- | ------------------------------------------------------ |
+| `HURI_URL`                   | `ws://localhost:8000/session` | HuRI's session endpoint (keep it off the internet)      |
+| `PLAYGROUND_ACCESS_CODE`     | empty (no code)               | Shared code visitors must type before starting          |
+| `PLAYGROUND_MAX_SESSIONS`    | `2`                           | Concurrent conversations; others are told to wait       |
+| `PLAYGROUND_SESSION_SECONDS` | `300`                         | Conversation length before it moves to the questions    |
+| `PLAYGROUND_QUESTIONNAIRES`  | `godspeed,rosas`              | Which questionnaires to show, in order                  |
+| `PLAYGROUND_DATA_DIR`        | `playground_data`             | Where `responses.jsonl` is written                      |
+| `PLAYGROUND_HOST` / `_PORT`  | `127.0.0.1` / `8080`          | Listen address                                          |
+
+Each line of `responses.jsonl` holds one visitor's answers, the per-dimension
+scores (Godspeed: anthropomorphism, animacy, likeability, perceived
+intelligence, perceived safety; RoSAS: warmth, competence, discomfort), the
+conversation length and number of questions — not what the visitor wrote.
+Pipelines visitors can pick are in
+[src/playground/presets.yaml](src/playground/presets.yaml), questionnaire items
+in [src/playground/questionnaires/](src/playground/questionnaires/).
+
+In the "Text chat with voice" mode the page plays HuRI's voice and, if the
+Mouse-Man model is present, shows him above the conversation. When HuRI runs
+`mov` (EMAGE) he gestures with the speech; on a HuRI without it the session is
+opened again without `mov` and he only idles, nodding with the voice. Each
+stored response lists the `modules` the visitor got. EMAGE also runs on AMD GPUs
+with the ROCm PyTorch build (measured on an RX 7700S: 0.07 s per 3 s of speech),
+although `scripts/install_local.sh` turns it off on AMD. The model (30 MB) is
+not committed: copy `frontend/public/model.fbx` from
+[HuRI_website_demo](https://github.com/Lucy-Robotics/HuRI_website_demo) (Git
+LFS) to `src/playground/static/avatar/model.fbx`. Without it the page is text
+only. That model has no mouth rig, so his mouth does not move.
+
 ## Testing a change
 
 ```sh

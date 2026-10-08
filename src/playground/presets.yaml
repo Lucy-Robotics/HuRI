@@ -1,0 +1,52 @@
+# Pipelines a playground visitor can pick. The browser only ever sends a preset
+# id: modules and their args stay on the server, because HuRI instantiates
+# whatever module config a client hands it.
+#
+# inbound:  topics the browser may publish, each with its own limits.
+# outbound: topics HuRI streams back to the browser.
+
+spoken:
+  label: Text chat with voice
+  description: Type to HuRI; it writes and speaks its answers.
+  inbound:
+    question:
+      max_per_minute: 10
+      max_chars: 500
+  outbound: [token, audio.out, motion]
+  # Gestures need EMAGE. On a HuRI without mov the session is opened again
+  # without it, so the avatar idles instead of gesturing.
+  optional:
+    mov: [motion]
+  modules:
+    rag:
+      name: rag
+      args:
+        language: en
+        tone: friendly
+        response_format: short
+        max_history_turns: 6
+        temperature: 0.7
+    tts:
+      name: tts
+      args: {}
+    mov:
+      name: mov
+      args: {}
+
+text:
+  label: Text chat
+  description: Type to HuRI and read its answers as they are written.
+  inbound:
+    question:
+      max_per_minute: 10
+      max_chars: 500
+  outbound: [token]
+  modules:
+    rag:
+      name: rag
+      args:
+        language: en
+        tone: friendly
+        response_format: short
+        max_history_turns: 6
+        temperature: 0.7
