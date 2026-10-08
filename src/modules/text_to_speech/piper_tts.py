@@ -69,6 +69,7 @@ class PiperTTSHandle:
             )
 
         self._voice = PiperVoice.load(voice_path)
+        self._voice.session = self._build_session(voice_path)
         self._syn_config = self._build_syn_config(length_scale, volume)
         # Probe the real output rate rather than trusting a constant: it differs
         # per voice (22.05 kHz for -medium, 16 kHz for some -low voices) and the
@@ -79,6 +80,25 @@ class PiperTTSHandle:
         print(
             f"[PiperTTS] loaded {os.path.basename(voice_path)} "
             f"@ {self._sample_rate}Hz (onnxruntime, CPU)"
+        )
+
+    @staticmethod
+    def _build_session(voice_path: str):
+        """The ONNX session Piper would build, minus onnxruntime's memory pattern.
+
+        The memory-pattern planner caches buffer layouts per input shape, but the
+        audio length Piper predicts changes from run to run. The second phrase
+        with an already-seen phoneme count then fails in a Reshape node, and the
+        whole sentence is silently dropped. PiperVoice.load takes no session
+        options, so the session is rebuilt here.
+        """
+
+        import onnxruntime
+
+        options = onnxruntime.SessionOptions()
+        options.enable_mem_pattern = False
+        return onnxruntime.InferenceSession(
+            voice_path, sess_options=options, providers=["CPUExecutionProvider"]
         )
 
     @staticmethod
