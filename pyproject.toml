@@ -25,6 +25,9 @@ strict_optional = true
 warn_unused_ignores = true
 warn_return_any = true
 warn_unused_configs = true
+exclude = [
+  "^tests/",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

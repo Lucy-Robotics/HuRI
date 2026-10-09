@@ -2,17 +2,17 @@ import asyncio
 import importlib
 import json
 import struct
+import traceback
 from collections import defaultdict
 from dataclasses import asdict
-from typing import Any, Dict, Generic, List, Type, TypeVar
+from typing import Any, Dict, Generic, List, Mapping, Type, TypeVar
 
-import numpy as np
 import websockets
 
 from src.core.dataclasses.config import ClientConfig
 from src.core.events import EventData
 
-T = TypeVar("T", bound=EventData | bytes)
+T = TypeVar("T", bound=EventData)
 
 
 class ClientSender(Generic[T]):
@@ -45,16 +45,20 @@ class ClientSender(Generic[T]):
 
         await ws.send(packet)
 
-    async def _send_event_data(self, ws: websockets.ClientConnection, data: EventData):
-        packet = json.dumps({"topic": self.topic, "data": asdict(data)})
+    async def _send_event_data(
+        self, ws: websockets.ClientConnection, data: Mapping[str, Any]
+    ):
+        packet = json.dumps({"topic": self.topic, "data": data})
 
         await ws.send(packet)
 
     async def send(self, ws: websockets.ClientConnection, data: T):
-        if isinstance(data, bytes):
-            await self._send_bytes(ws, data)
+        wire = data.to_wire()
+
+        if isinstance(wire, bytes):
+            await self._send_bytes(ws, wire)
         else:
-            await self._send_event_data(ws, data)
+            await self._send_event_data(ws, wire)
 
 
 class ClientHook(Generic[T]):
@@ -109,6 +113,21 @@ class Client:
                     )
                 )
 
+    @staticmethod
+    def _log_hook_error(task: "asyncio.Task") -> None:
+        """Surface hook failures.
+
+        Hooks are fired as detached tasks, so an exception inside one is only
+        reported by asyncio's "never retrieved" warning at GC — long after the
+        fact, if at all. That is why a hook crashing on every chunk looks
+        identical to a stream that was never sent.
+        """
+        if task.cancelled():
+            return
+        exc = task.exception()
+        if exc is not None:
+            traceback.print_exception(type(exc), exc, exc.__traceback__)
+
     async def _receive_loop(self, ws: websockets.ClientConnection):
         try:
             while True:
@@ -120,46 +139,20 @@ class Client:
                     topic = msg[2 : 2 + topic_len].decode()
                     data = msg[2 + topic_len :]
 
-                    if topic == "audio" and len(data) >= 13:
-                        sample_rate, end, pts = struct.unpack(">IBd", data[:13])
-                        # Samples are native-endian float32
-                        # (Sender uses ndarray.tobytes()).
-                        samples = np.frombuffer(data[13:], dtype=np.float32)
-                        data = {
-                            "sample_rate": sample_rate,
-                            "end": end,
-                            "pts": pts,
-                            "data": samples,
-                        }
-                    elif topic == "motion" and len(data) >= 16:
-                        pts, fps, n_frames = struct.unpack(">dII", data[:16])
-                        print(f"<< motion: pts={pts:.3f}s frames={n_frames} @ {fps}fps")
-                        data = {
-                            "poses": np.ndarray(0),
-                            "expressions": np.ndarray(0),
-                            "trans": np.ndarray(0),
-                            "fps": fps,
-                            "pts": pts,
-                        }
-                    else:
-                        print(f"<< {topic}: bytes ({len(data)}B)")
                 else:
                     event = json.loads(msg)
                     topic = event["topic"]
                     data = event["data"]
 
                 for hook in self.hooks[topic]:
-                    # Hydrate via from_wire (not a bare **data splat) so events
-                    # with nested EventData fields — e.g. RAGQuestion.transcript /
-                    # .emotion — are rebuilt as dataclasses, mirroring the server's
-                    # EventDataFactory. Build a fresh instance per hook so a topic
-                    # with several hooks doesn't re-splat an already-built event.
-                    hook_data = (
-                        data
-                        if isinstance(data, bytes)
-                        else hook.input_type.from_wire(data)
-                    )
-                    asyncio.create_task(hook.hook(hook_data))
+                    # `from_wire` is the deserialization contract for BOTH wire
+                    # shapes — Audio/Motion decode bytes, JsonEvent decodes the
+                    # mapping. Handing binary topics the raw bytes instead left
+                    # every hook typed for a bytes event (audio, motion)
+                    # receiving a `bytes` and failing on attribute access.
+                    hook_data = hook.input_type.from_wire(data)
+                    task = asyncio.create_task(hook.hook(hook_data))
+                    task.add_done_callback(self._log_hook_error)
 
         except (asyncio.CancelledError, websockets.ConnectionClosedOK):
             pass
@@ -170,10 +163,30 @@ class Client:
 
             await ws.send(json.dumps(asdict(self.config)))
 
-            init_msg = json.loads(await ws.recv())
-            if init_msg.get("type") == "session_init":
-                user_id = init_msg["user_id"]
-                print(f"Session started with _user_id: {user_id}")
+            try:
+                init_msg = json.loads(await ws.recv())
+            except websockets.ConnectionClosed:
+                print(
+                    "HuRI closed the connection without sending a session reply.\n"
+                    "  Check the server is deployed: .huri-local/status.sh\n"
+                    "  Replica errors: /tmp/ray/session_latest/logs/serve/"
+                )
+                return
+
+            msg_type = init_msg.get("type")
+            if msg_type == "session_error":
+                print(f"HuRI rejected this client config: {init_msg.get('error')}")
+                server_modules = init_msg.get("server_modules")
+                if server_modules:
+                    print(f"  server registered : {', '.join(server_modules)}")
+                    print(f"  this config wants : {', '.join(self.config.modules)}")
+                return
+            if msg_type != "session_init":
+                print(f"Unexpected first message from HuRI: {init_msg!r}")
+                return
+
+            user_id = init_msg["user_id"]
+            print(f"Session started with _user_id: {user_id}")
 
             receive_task = asyncio.create_task(self._receive_loop(ws=ws))
             await asyncio.gather(

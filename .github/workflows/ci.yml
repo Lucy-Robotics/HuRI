@@ -1,0 +1,284 @@
+# Fast checks on every push and pull request (~3 minutes).
+#
+# The expensive "does it actually install" run lives in install.yml, and the
+# GPU paths live in gpu.yml (self-hosted — no hosted runner has a GPU).
+#
+# What this deliberately covers, because it is what has actually broken before:
+#   * the shipped configs parsing at all (an indentation slip made
+#     client_aux.yaml unloadable, and client_full.yaml was missing a required key)
+#   * the installer's planner on all three supported distros, without installing
+#     anything — this is where OS/python/package-list bugs show up
+#   * the flag surface, including the overrides that feed the resource budget
+name: CI
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  shell:
+    name: shell syntax + shellcheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: shellcheck
+        # Preinstalled on hosted runners, absent from the slim `act` images.
+        # Installing it here means the job does not silently depend on what
+        # the runner image happens to bundle.
+        run: |
+          command -v shellcheck >/dev/null || {
+            sudo apt-get update -qq
+            sudo apt-get install -y --no-install-recommends shellcheck
+          }
+      - name: bash -n
+        run: |
+          for f in scripts/*.sh; do bash -n "$f" && echo "ok  $f"; done
+      - name: shellcheck
+        # -x so it follows sourced files; warnings are informational for now
+        # because install_local.sh predates this check.
+        run: shellcheck -x -S warning scripts/*.sh || true
+      - name: shellcheck (errors must be clean)
+        run: shellcheck -x -S error scripts/*.sh
+
+  configs:
+    name: shipped configs parse
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install pyyaml
+      - name: every config/*.yaml is valid YAML
+        run: |
+          python - <<'PY'
+          import glob, sys, yaml
+          bad = []
+          for path in sorted(glob.glob("config/*.yaml")):
+              try:
+                  yaml.safe_load(open(path))
+                  print("ok  ", path)
+              except Exception as exc:
+                  bad.append(f"{path}: {type(exc).__name__}: {exc}")
+          if bad:
+              print("\nFAILED:"); [print(" ", b) for b in bad]; sys.exit(1)
+          PY
+      - name: client configs declare the keys the loader requires
+        # ClientConfig.from_dict reads these with a bare subscript, so a missing
+        # one is a KeyError at startup rather than a validation message.
+        run: |
+          python - <<'PY'
+          import glob, sys, yaml
+          REQUIRED = ("user_id", "huri_url", "interface_path")
+          bad = []
+          for path in sorted(glob.glob("config/client_*.yaml")):
+              raw = yaml.safe_load(open(path)) or {}
+              # user_id is injected by the client at runtime, not stored in the file.
+              missing = [k for k in REQUIRED if k not in raw and k != "user_id"]
+              print(f"{'ok  ' if not missing else 'MISS'} {path}"
+                    f"{' -> ' + ','.join(missing) if missing else ''}")
+              if missing:
+                  bad.append(path)
+          sys.exit(1 if bad else 0)
+          PY
+
+  lint:
+    name: lint (black, isort, flake8, mypy)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: install the lint toolchain only
+        # mypy has ignore_missing_imports, so it runs without ray/torch/etc.
+        run: pip install -c constraints.txt black isort flake8 flake8-toml-config mypy
+      - run: black --check src tests
+      - run: isort --check-only src tests
+      - run: flake8 src tests
+      - name: mypy
+        # Not gating yet: src/modules/rag/{semantic_chunker,ingestion}.py carry
+        # pre-existing errors. Remove `|| true` once those are fixed.
+        run: mypy src --check-untyped-defs || true
+      - name: mypy (files that are already clean must stay clean)
+        # --follow-imports=silent: report only on the files listed below.
+        # modules.py imports MOV, so mypy follows it into
+        # gesture/emage/modeling.py and reported its 3 pre-existing
+        # transformers errors against this gate. Those surface only when
+        # transformers is importable, so a `type: ignore` would flip between
+        # needed and unused depending on the environment.
+        run: |
+          mypy --check-untyped-defs --follow-imports=silent \
+            src/core src/interfaces src/modules/text_to_speech \
+            src/modules/speech_to_text src/modules/factory.py src/modules/modules.py
+
+  plan:
+    name: installer plan (${{ matrix.name }})
+    runs-on: ${{ matrix.runs-on }}
+    container: ${{ matrix.container }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Ubuntu 24.04 and 22.04 are first-class hosted runners, so these run
+          # natively. 22.04's python is 3.10 and 24.04's is 3.12 — both are
+          # supported, which is exactly the range worth testing.
+          - name: ubuntu-24.04
+            runs-on: ubuntu-24.04
+            container: ""
+            python: /usr/bin/python3
+          - name: ubuntu-22.04
+            runs-on: ubuntu-22.04
+            container: ""
+            python: /usr/bin/python3
+          # Arch has no hosted runner and ships a python newer than 3.12, so it
+          # runs in a container and installs a supported interpreter with uv —
+          # the same thing the README tells a human to do.
+          - name: arch
+            runs-on: ubuntu-latest
+            container: archlinux:latest
+            python: ""
+    steps:
+      - name: arch — base tooling
+        if: matrix.name == 'arch'
+        # nodejs is for the JS actions (checkout, upload-artifact): hosted
+        # GitHub injects a node into job containers, `act` does not.
+        run: pacman -Syu --noconfirm --needed git curl ca-certificates nodejs
+
+      - uses: actions/checkout@v4
+
+      - name: arch — a supported python via uv
+        if: matrix.name == 'arch'
+        run: |
+          set -o pipefail
+          curl -LsSf --retry 3 --retry-all-errors https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: arch — resolve the interpreter
+        if: matrix.name == 'arch'
+        run: |
+          uv python install 3.12
+          echo "HURI_PY=$(uv python find 3.12)" >> "$GITHUB_ENV"
+
+      - name: resolve the interpreter
+        if: matrix.name != 'arch'
+        run: echo "HURI_PY=${{ matrix.python }}" >> "$GITHUB_ENV"
+
+      - name: plan
+        run: ./scripts/install_local.sh --plan-only --python "$HURI_PY"
+
+      - name: the plan must reach a usable verdict
+        # A GPU-less runner is the portable baseline: piper means voice out works
+        # anyway, so anything less than a voice pipeline is a regression.
+        run: |
+          ./scripts/install_local.sh --plan-only --python "$HURI_PY" >plan.txt 2>&1
+          grep -E 'VERDICT: (voice|full) pipeline' plan.txt \
+            || { echo "::error::no voice pipeline planned on a CPU-only host"; cat plan.txt; exit 1; }
+          grep -qE '^\s+tts\s+piper' plan.txt \
+            || { echo "::error::piper TTS was not planned"; cat plan.txt; exit 1; }
+
+      - name: flag surface
+        run: |
+          set -e
+          run() { echo "--- $*"; ./scripts/install_local.sh --plan-only --python "$HURI_PY" "$@" >/dev/null; }
+          run --profile cpu
+          run --modules rag
+          run --modules vad,stt,tag,qag,rag
+          run --stt-device cpu
+          run --tts-engine cosyvoice
+          run --stt-model small
+          run --llm-model qwen2.5:1.5b
+          run --llm-url http://remote.example:8000 --llm-model foo
+          run --vram 8192 --profile cpu
+          echo "--- rejections"
+          ! ./scripts/install_local.sh --plan-only --python "$HURI_PY" --modules bogus >/dev/null 2>&1
+          ! ./scripts/install_local.sh --plan-only --python "$HURI_PY" --tts-engine nope >/dev/null 2>&1
+          ! ./scripts/install_local.sh --plan-only --python "$HURI_PY" --stt-device tpu >/dev/null 2>&1
+          echo "all flag cases behaved as expected"
+
+      - name: upload the plan
+        # `!env.ACT` skips this under nektos/act, which has no artifact
+        # backend (the step dies on a missing ACTIONS_RUNTIME_TOKEN).
+        if: ${{ always() && !env.ACT }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: plan-${{ matrix.name }}
+          path: |
+            plan.txt
+            .huri-local/plan.env
+          if-no-files-found: ignore
+
+  test:
+    name: pytest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: system libraries the wheels dlopen / build against
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            build-essential ffmpeg libsndfile1 libportaudio2
+      - name: install deps (CPU torch — the CUDA wheel is ~2.5 GB and unnecessary)
+        run: |
+          pip install -c constraints.txt \
+            --index-url https://download.pytorch.org/whl/cpu \
+            torch==2.3.1 torchaudio==2.3.1
+          pip install -c constraints.txt -r serve_requirements.txt -r requirements.txt
+      - run: pytest -q
+      - name: the shipped client configs load through the real loader
+        # Stricter than the `configs` job: this exercises ClientConfig.from_dict
+        # and the sender/hook/module dataclasses, not just YAML syntax.
+        run: |
+          python - <<'PY'
+          import glob, sys
+          from src.client import load_client_config
+          bad = []
+          for path in sorted(glob.glob("config/client_*.yaml")):
+              try:
+                  cfg = load_client_config(path)
+                  print(f"ok   {path}  modules={len(cfg.modules)} hooks={list(cfg.hooks)}")
+              except Exception as exc:
+                  print(f"FAIL {path}  {type(exc).__name__}: {exc}")
+                  bad.append(path)
+          sys.exit(1 if bad else 0)
+          PY
+      - name: the module registry builds for representative subsets
+        run: |
+          for mods in "" "rag" "vad,stt,tag,qag,rag" "vad,stt,tag,qag,rag,emo,eag,tts"; do
+            HURI_MODULES="$mods" python -c "
+          import os, src.modules.modules as m
+          got = m.get_modules()
+          print(f'HURI_MODULES={os.environ[\"HURI_MODULES\"]!r:42s} -> {len(got)} modules')
+          "
+          done
+      - name: piper synthesises without an audio device
+        # The engine that makes HuRI portable is also the one CI can test: it
+        # writes samples into an array, it does not open a sound card.
+        run: |
+          python -m piper.download_voices --download-dir /tmp/piper en_US-lessac-medium
+          python - <<'PY'
+          import time
+          import numpy as np
+          from piper import PiperVoice
+          v = PiperVoice.load("/tmp/piper/en_US-lessac-medium.onnx")
+          t0 = time.time()
+          n = sum(np.asarray(c.audio_float_array).size for c in v.synthesize("HuRI is ready."))
+          dur = n / v.config.sample_rate
+          rtf = (time.time() - t0) / dur
+          print(f"{dur:.2f}s audio in {time.time()-t0:.2f}s ({rtf:.3f}x realtime)")
+          assert rtf < 1.0, f"piper must be faster than realtime, got {rtf:.2f}x"
+          PY
