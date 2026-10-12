@@ -33,14 +33,6 @@ client = [
   "websockets>=16,<17",
   "omegaconf>=2.3,<2.4",
 ]
-# Dependencies of the TTS module, the last curated module inside huri-core
-# (#84 splits it per backend). Every other module declares its own, in its
-# package under packages/.
-tts = [
-  "huri-core[server]",
-  "numpy>=1.26,<2",
-  "piper-tts>=1.8,<1.9",
-]
 dev = [
   "black==26.3.1",
   "flake8==7.3.0",
@@ -54,13 +46,9 @@ dev = [
 [project.urls]
 Repository = "https://github.com/Lucy-Robotics/HuRI"
 
-# Plugin registration (see huri_core/core/plugins.py). An installed package
-# adds modules and events the same way, from its own pyproject.toml; the
-# curated events are registered by huri-events (packages/huri-events) and the
-# curated modules by their packages (packages/huri-module-*).
-[project.entry-points."huri.modules"]
-# Still in huri-core until #84 splits it per backend.
-tts = "huri_core.modules.text_to_speech.text_to_speech:TTS"
+# huri-core registers no module and no event: the curated ones come from their
+# own packages (packages/huri-events, packages/huri-module-*), through the
+# entry points in their pyproject.toml (see huri_core/core/plugins.py).
 
 [tool.setuptools.dynamic]
 # Single source of truth: huri_core/__init__.py. See RELEASING.md.
@@ -112,6 +100,9 @@ pythonpath = [
   "packages/huri-module-emo",
   "packages/huri-module-rag",
   "packages/huri-module-mov",
+  "packages/huri-tts",
+  "packages/huri-module-tts-piper",
+  "packages/huri-module-tts-cosyvoice",
   "examples/cli",
 ]
 python_files = ["test_*.py"]

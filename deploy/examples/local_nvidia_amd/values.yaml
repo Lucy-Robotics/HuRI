@@ -289,7 +289,7 @@ models:
       # inside mountPath, so the final path is mountPath/modelId.
       modelId: FunAudioLLM/Fun-CosyVoice3-0.5B-2512
     # Env vars injected into every worker that mounts this model.
-    # HURI_MODEL_PATH must match mountPath/modelId (see text_to_speech.py).
+    # HURI_MODEL_PATH must match mountPath/modelId (see huri_tts_cosyvoice/handle.py).
     env:
       HURI_MODEL_PATH: /models/cosytts/FunAudioLLM/Fun-CosyVoice3-0.5B-2512
       # Path to the CosyVoice repo root containing third_party/Matcha-TTS.

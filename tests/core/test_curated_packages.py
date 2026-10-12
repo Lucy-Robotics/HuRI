@@ -56,4 +56,15 @@ def test_each_curated_module_lives_in_exactly_one_package():
         for name in project(path)["entry-points"]["huri.modules"]:
             assert name not in seen, f"{name} in {seen.get(name)} and {path.name}"
             seen[name] = path.name
-    assert set(seen) == {"vad", "stt", "tag", "emo", "eag", "qag", "rag", "mov"}
+    assert set(seen) == {
+        "vad",
+        "stt",
+        "tag",
+        "emo",
+        "eag",
+        "qag",
+        "rag",
+        "mov",
+        "tts",
+        "tts_cosyvoice",
+    }

@@ -342,8 +342,11 @@ See `tests/speech_to_text/test_stt_tag.py` and `tests/core/test_testing.py`.
   - `huri-module-rag` — RAG, QAG (question aggregator), `ingestion`,
     `semantic_chunker`, `qdrant_utils`, memory maintenance/inspection
   - `huri-module-mov` — MOV (gestures) + the vendored `emage` model code
-- **huri_core/modules/text_to_speech** — `piper_tts` (default engine),
-  `text_to_speech` (CosyVoice3 + the `TTS` module); the last module inside core
+  - `huri-module-tts-piper` — `tts`, the default engine (Piper, ONNX, any CPU)
+  - `huri-module-tts-cosyvoice` — `tts_cosyvoice` (CosyVoice3 voice cloning,
+    NVIDIA); wire it instead of `tts`
+- **packages/huri-tts** — `StreamingTTS`, the engine-agnostic half both TTS
+  modules share (a library, registers no module)
 
 ## Modules as plugins
 

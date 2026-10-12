@@ -96,7 +96,7 @@ jobs:
           print("HURI_MODULES:", env["HURI_MODULES"])
           # Every deployment Serve is told to configure must be one the app will
           # actually build, or `serve deploy` fails the whole application.
-          expected = {"stt": "STTHandle", "emo": "EMOHandle", "rag": "RAGHandle", "tts": "TTSHandle", "mov": "MOVHandle"}
+          expected = {"stt": "STTHandle", "emo": "EMOHandle", "rag": "RAGHandle", "tts": "TTSHandle", "tts_cosyvoice": "CosyVoiceTTSHandle", "mov": "MOVHandle"}
           mods = set(env["HURI_MODULES"].split(","))
           for mod, dep in expected.items():
               if dep in names:

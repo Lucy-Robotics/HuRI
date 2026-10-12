@@ -119,7 +119,7 @@ jobs:
         # needed and unused depending on the environment.
         run: |
           mypy --check-untyped-defs --follow-imports=silent \
-            huri_core/core packages/huri-events/huri_events examples/cli/huri_cli huri_core/modules/text_to_speech \
+            huri_core/core packages/huri-events/huri_events examples/cli/huri_cli packages/huri-tts/huri_tts \
             packages/huri-module-vad/huri_vad packages/huri-module-stt/huri_stt packages/huri-module-tag/huri_tag
 
   plan:

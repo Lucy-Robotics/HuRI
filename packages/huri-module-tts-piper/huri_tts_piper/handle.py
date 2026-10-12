@@ -1,6 +1,6 @@
 """Piper text-to-speech deployment — the portable TTS engine.
 
-Why this exists alongside CosyVoice3 (``text_to_speech.py``):
+Why this exists alongside CosyVoice3 (huri-module-tts-cosyvoice):
 
 CosyVoice gives zero-shot voice cloning but needs torch plus a working
 CUDA/ROCm stack, and on CPU it synthesises at roughly 7x *slower* than
@@ -11,15 +11,14 @@ an AMD machine there is no fast path.
 Piper is ONNX-only: no torch, no GPU, a 61 MB voice model, and measured at
 ~0.03x realtime on a Ryzen 7840HS — about 30x faster than it speaks, with the
 first chunk in ~30 ms. That makes it the engine that works on *any* machine,
-which is why it is the default. CosyVoice stays selectable with
-``HURI_TTS_ENGINE=cosyvoice`` when an NVIDIA GPU is present and the cloned
-voice matters more than latency.
+which is why it is the default. CosyVoice (huri-module-tts-cosyvoice) is the
+other engine, for when an NVIDIA GPU is present and the cloned voice matters
+more than latency: a separate module, `tts_cosyvoice`, wired in its place.
 
-The public surface is deliberately identical to ``TTSHandle`` —
-``get_sample_rate`` / ``start_session`` / ``push_text`` / ``stream_audio`` — so
-``TTS`` (the per-session module) and the generated Serve config work with
-either engine unchanged. Both are registered as ``name="TTSHandle"`` so a config's
-``deployments: - name: TTSHandle`` block matches whichever is bound.
+The public surface is the one huri_tts.StreamingTTS drives —
+``get_sample_rate`` / ``start_session`` / ``push_text`` / ``stream_audio``. The
+deployment keeps the name ``TTSHandle``, so existing ``deployments:`` blocks
+still apply to the default engine.
 """
 
 import asyncio

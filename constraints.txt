@@ -29,7 +29,7 @@ setuptools<82
 # without requirements.txt, so it needs neither ray nor torch). Unpinned it
 # resolved to mypy 2.3.1 / black 26.5.1 / isort 9.0.1 while the project pins
 # 1.20.2 / 26.3.1 / 8.0.1 -- and the newer mypy reported still-needed
-# `type: ignore[union-attr]`s in rag.py and text_to_speech.py as unused.
+# `type: ignore[union-attr]`s in rag.py and the CosyVoice TTS handle as unused.
 # Keep these in step with requirements.txt.
 black==26.3.1
 isort==8.0.1
