@@ -1,33 +1,12 @@
 # HuRI websocket server url
 huri_url: ws://localhost:8000/session
 
-# Define interface to be used's import path
-interface_path: huri_core.interfaces.cli_interface:cli_interface
+# Topics this client publishes to HuRI. Every module input must be produced by
+# another module of the session or listed here, or the session is rejected.
+send: [huri.question]
 
-# Define senders to be used and their custom args
-senders:
-  # sender tag can be anything
-  example:
-    # sender name must be in the list of available ClientSender in chosen Interface (Interface.get_senders)
-    name: my_sender
-    # topic the sender will send to HuRI, it must match output_type event data structure
-    topic: my_event
-    # if my_sender init with "model", "sample_rate" and "refresh_rate" params, they can be customized here
-    args:
-      refresh_rate: infinite
-
-# Define hooks to be used and their custom args
-hooks:
-  # hook tag can be anything
-  example:
-    # hook name must be in the list of available ClientHook in chosen Interface (Interface.get_senders)
-    name: my_hook
-    # topics the hook will process from HuRI, it must match input_type event data structure
-    topics: [my_event, llm_response]
-    # if my_hook init with "model", "sample_rate" and "refresh_rate" params, they can be customized here
-    args:
-      sample_rate: 0
-      no: beat
+# Topics this client receives. Each must be emitted by a module of the session.
+subscribe: [huri.token]
 
 # Define module to be used and their custom args
 modules:

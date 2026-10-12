@@ -78,7 +78,7 @@ jobs:
         run: |
           python - <<'PY'
           import glob, sys, yaml
-          REQUIRED = ("user_id", "huri_url", "interface_path")
+          REQUIRED = ("user_id", "huri_url", "modules", "send", "subscribe")
           bad = []
           for path in sorted(glob.glob("config/client_*.yaml")):
               raw = yaml.safe_load(open(path)) or {}
@@ -252,7 +252,7 @@ jobs:
           for path in sorted(glob.glob("config/client_*.yaml")):
               try:
                   cfg = load_client_config(path)
-                  print(f"ok   {path}  modules={len(cfg.modules)} hooks={list(cfg.hooks)}")
+                  print(f"ok   {path}  modules={len(cfg.modules)} subscribe={cfg.subscribe}")
               except Exception as exc:
                   print(f"FAIL {path}  {type(exc).__name__}: {exc}")
                   bad.append(path)

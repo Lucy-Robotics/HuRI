@@ -1,196 +1,230 @@
+"""Client SDK: a small transport object for talking to a HuRI server.
+
+    client = HuRIClient(url, modules={"rag": {"name": "rag"}}, sends=["huri.question"])
+    client.on("huri.token", Token, handle_token)
+    async with client:
+        await client.send("huri.question", RAGQuestion(...))
+        await client.wait_closed()
+
+The SDK owns the websocket, the session handshake and the wire encoding (JSON
+frames, and binary frames `[u16 topic length][topic][payload]`). It knows
+nothing about audio, text or gestures: the use case registers the handlers.
+
+Handlers of one topic run one at a time, in arrival order (audio playback
+needs that); different topics run concurrently. A failing handler is logged
+and does not stop the others.
+"""
+
 import asyncio
-import importlib
 import json
+import logging
 import struct
-import traceback
-from collections import defaultdict
-from dataclasses import asdict
-from typing import Any, Dict, Generic, List, Mapping, Type, TypeVar
+import uuid
+from dataclasses import dataclass
+from typing import (
+    Any,
+    Awaitable,
+    Callable,
+    Dict,
+    Iterable,
+    List,
+    Mapping,
+    Optional,
+    Type,
+    TypeVar,
+)
 
 import websockets
 
-from huri_core.core.dataclasses.config import ClientConfig
 from huri_core.core.events import EventData
 
-T = TypeVar("T", bound=EventData)
+logger = logging.getLogger("huri.client")
+
+E = TypeVar("E", bound=EventData)
+Handler = Callable[[Any], Awaitable[None]]
 
 
-class ClientSender(Generic[T]):
-    """This class abstract sending data to HuRI.
+class HuRISessionError(RuntimeError):
+    """The server refused the session (unknown module, broken wiring...)."""
 
-    output_type: is the event data structure that the ClientSender will send.
-    It can be EventData or bytes, and must match event topic it send.
+    def __init__(self, error: str, server_modules: Optional[List[str]] = None):
+        self.error = error
+        self.server_modules = server_modules or []
+        super().__init__(error)
 
-    Class derived from ClientSender must implement input_loop,
-    and use ClientSender.send to send data to HuRI.
 
-    `singletton` is available to access shared ressources.
+@dataclass
+class _Subscription:
+    event_cls: Type[EventData]
+    handlers: List[Handler]
+    queue: "asyncio.Queue[Any]"
+
+
+def encode(topic: str, event: EventData) -> str | bytes:
+    """Wire frame of an event: binary when to_wire() gives bytes, else JSON."""
+
+    wire = event.to_wire()
+    if isinstance(wire, bytes):
+        topic_bytes = topic.encode()
+        return struct.pack(">H", len(topic_bytes)) + topic_bytes + wire
+    return json.dumps({"topic": topic, "data": wire})
+
+
+def decode(message: str | bytes) -> tuple[str, Any]:
+    """(topic, raw wire data) of a frame."""
+
+    if isinstance(message, bytes):
+        topic_len = struct.unpack(">H", message[:2])[0]
+        return message[2 : 2 + topic_len].decode(), message[2 + topic_len :]
+    frame = json.loads(message)
+    return frame["topic"], frame["data"]
+
+
+class HuRIClient:
+    """Connection to a HuRI server.
+
+    :url: websocket URL of the server session endpoint.
+    :modules: the session's pipeline, as in the YAML `modules:` section
+        ({id: {"name": "stt", "args": {...}}} or {"module": "pkg.mod:Cls"}).
+    :sends: topics this client will send; the server checks every module input
+        has a producer, and send() refuses any other topic.
+    :user_id: identity the server keeps per-user state under (RAG memory).
+        A random one is used when omitted.
     """
-
-    output_type: Type[T]
-
-    def __init__(self, topic: str, singletton: Any, **_):
-        """
-        :topic: topic sent to HuRI
-        :singletton: allow to get shared ressources"""
-        self.topic = topic
-        self.singletton = singletton
-
-    async def input_loop(self, ws: websockets.ClientConnection):
-        raise NotImplementedError
-
-    async def _send_bytes(self, ws: websockets.ClientConnection, data: bytes):
-        topic_bytes = self.topic.encode()
-        packet = struct.pack(">H", len(topic_bytes)) + topic_bytes + data
-
-        await ws.send(packet)
-
-    async def _send_event_data(
-        self, ws: websockets.ClientConnection, data: Mapping[str, Any]
-    ):
-        packet = json.dumps({"topic": self.topic, "data": data})
-
-        await ws.send(packet)
-
-    async def send(self, ws: websockets.ClientConnection, data: T):
-        wire = data.to_wire()
-
-        if isinstance(wire, bytes):
-            await self._send_bytes(ws, wire)
-        else:
-            await self._send_event_data(ws, wire)
-
-
-class ClientHook(Generic[T]):
-    """This class abstract processing data from HuRI.
-
-    input_type: is the event data structure that the ClientHook will process.
-    It can be EventData or bytes, and must match event topic it react to.
-
-    Class derived from ClientHook must implement hook.
-
-    `singletton` is available to access and modifies shared ressources.
-    """
-
-    input_type: Type[T]
-
-    def __init__(self, singletton: Any, **_):
-        self.singletton = singletton
-
-    async def hook(self, data: T):
-        raise NotImplementedError
-
-
-class Client:
-    """Client is init with a Config, and connects to HuRI using websockets"""
 
     def __init__(
         self,
-        config: ClientConfig,
+        url: str,
+        modules: Mapping[str, Mapping[str, Any]],
+        sends: Iterable[str] = (),
+        user_id: Optional[str] = None,
     ):
-        self.config = config
+        self.url = url
+        self.modules = {k: dict(v) for k, v in modules.items()}
+        self.sends = list(sends)
+        self.user_id = user_id or str(uuid.uuid4())
+        self._subs: Dict[str, _Subscription] = {}
+        self._ws: Optional[websockets.ClientConnection] = None
+        self._tasks: List[asyncio.Task] = []
 
-        module_path, object_name = self.config.interface_path.split(":", 1)
+    # --- configuration ----------------------------------------------------
 
-        module = importlib.import_module(module_path)
-        interface = getattr(module, object_name)
+    def on(
+        self, topic: str, event_cls: Type[E], handler: Callable[[E], Awaitable[None]]
+    ) -> None:
+        """Call `handler(event)` for every `topic` event. Before connecting:
+        the subscriptions are part of the session handshake."""
 
-        available_senders = interface.get_senders()
-        self.senders: List[ClientSender] = [
-            available_senders[sender.name](
-                topic=sender.topic, singletton=interface.singletton, **sender.args
+        if self._ws is not None:
+            raise RuntimeError("subscribe with on() before connecting")
+        sub = self._subs.get(topic)
+        if sub is None:
+            self._subs[topic] = _Subscription(event_cls, [handler], asyncio.Queue())
+        elif sub.event_cls is not event_cls:
+            raise ValueError(
+                f"{topic!r} is already subscribed as {sub.event_cls.__name__}, "
+                f"not {event_cls.__name__}"
             )
-            for sender in self.config.senders.values()
-        ]
+        else:
+            sub.handlers.append(handler)
 
-        available_hooks = interface.get_hooks()
-        self.hooks: Dict[str, List[ClientHook]] = defaultdict(list)
-        for hook in self.config.hooks.values():
-            for topic in hook.topics:
-                self.hooks[topic].append(
-                    available_hooks[hook.name](
-                        singletton=interface.singletton, **hook.args
-                    )
-                )
+    def handshake(self) -> Dict[str, Any]:
+        """The session request sent to the server."""
 
-    @staticmethod
-    def _log_hook_error(task: "asyncio.Task") -> None:
-        """Surface hook failures.
+        return {
+            "user_id": self.user_id,
+            "modules": self.modules,
+            "subscribe": sorted(self._subs),
+            "send": self.sends,
+        }
 
-        Hooks are fired as detached tasks, so an exception inside one is only
-        reported by asyncio's "never retrieved" warning at GC — long after the
-        fact, if at all. That is why a hook crashing on every chunk looks
-        identical to a stream that was never sent.
-        """
-        if task.cancelled():
-            return
-        exc = task.exception()
-        if exc is not None:
-            traceback.print_exception(type(exc), exc, exc.__traceback__)
+    # --- connection ---------------------------------------------------------
 
-    async def _receive_loop(self, ws: websockets.ClientConnection):
+    async def connect(self) -> "HuRIClient":
+        ws = await websockets.connect(self.url)
         try:
-            while True:
-                msg = await ws.recv()
+            await ws.send(json.dumps(self.handshake()))
+            try:
+                reply = json.loads(await ws.recv())
+            except websockets.ConnectionClosed as e:
+                raise HuRISessionError(
+                    "the server closed the connection without a session reply"
+                ) from e
+            if reply.get("type") == "session_error":
+                raise HuRISessionError(
+                    reply.get("error", ""), reply.get("server_modules")
+                )
+            if reply.get("type") != "session_init":
+                raise HuRISessionError(f"unexpected first message: {reply!r}")
+        except BaseException:
+            await ws.close()
+            raise
 
-                if isinstance(msg, bytes):
-                    topic_len = struct.unpack(">H", msg[:2])[0]
+        self.user_id = reply.get("user_id", self.user_id)
+        self._ws = ws
+        self._tasks = [asyncio.create_task(self._receive_loop(ws))]
+        self._tasks += [
+            asyncio.create_task(self._dispatch_loop(topic, sub))
+            for topic, sub in self._subs.items()
+        ]
+        return self
 
-                    topic = msg[2 : 2 + topic_len].decode()
-                    data = msg[2 + topic_len :]
+    async def close(self) -> None:
+        for task in self._tasks:
+            task.cancel()
+        await asyncio.gather(*self._tasks, return_exceptions=True)
+        self._tasks = []
+        if self._ws is not None:
+            await self._ws.close()
+            self._ws = None
 
-                else:
-                    event = json.loads(msg)
-                    topic = event["topic"]
-                    data = event["data"]
+    async def __aenter__(self) -> "HuRIClient":
+        return await self.connect()
 
-                for hook in self.hooks[topic]:
-                    # `from_wire` is the deserialization contract for BOTH wire
-                    # shapes — Audio/Motion decode bytes, JsonEvent decodes the
-                    # mapping. Handing binary topics the raw bytes instead left
-                    # every hook typed for a bytes event (audio, motion)
-                    # receiving a `bytes` and failing on attribute access.
-                    hook_data = hook.input_type.from_wire(data)
-                    task = asyncio.create_task(hook.hook(hook_data))
-                    task.add_done_callback(self._log_hook_error)
+    async def __aexit__(self, *_) -> None:
+        await self.close()
 
-        except (asyncio.CancelledError, websockets.ConnectionClosedOK):
+    async def wait_closed(self) -> None:
+        """Until the server closes the session."""
+
+        if self._ws is not None:
+            await self._ws.wait_closed()
+
+    # --- traffic -----------------------------------------------------------
+
+    async def send(self, topic: str, event: EventData) -> None:
+        if self._ws is None:
+            raise RuntimeError("not connected")
+        if topic not in self.sends:
+            raise ValueError(
+                f"{topic!r} is not in this client's sends {self.sends}: declare it "
+                "so the server can check the session wiring"
+            )
+        await self._ws.send(encode(topic, event))
+
+    async def _receive_loop(self, ws: websockets.ClientConnection) -> None:
+        try:
+            async for message in ws:
+                topic, data = decode(message)
+                sub = self._subs.get(topic)
+                if sub is None:
+                    logger.warning("dropping frame on unsubscribed topic %r", topic)
+                    continue
+                sub.queue.put_nowait(data)
+        except websockets.ConnectionClosed:
             pass
 
-    async def run(self):
-        async with websockets.connect(self.config.huri_url) as ws:
-            print("Connected to server")
-
-            await ws.send(json.dumps(asdict(self.config)))
-
+    async def _dispatch_loop(self, topic: str, sub: _Subscription) -> None:
+        while True:
+            data = await sub.queue.get()
             try:
-                init_msg = json.loads(await ws.recv())
-            except websockets.ConnectionClosed:
-                print(
-                    "HuRI closed the connection without sending a session reply.\n"
-                    "  Check the server is deployed: .huri-local/status.sh\n"
-                    "  Replica errors: /tmp/ray/session_latest/logs/serve/"
-                )
-                return
-
-            msg_type = init_msg.get("type")
-            if msg_type == "session_error":
-                print(f"HuRI rejected this client config: {init_msg.get('error')}")
-                server_modules = init_msg.get("server_modules")
-                if server_modules:
-                    print(f"  server registered : {', '.join(server_modules)}")
-                    print(f"  this config wants : {', '.join(self.config.modules)}")
-                return
-            if msg_type != "session_init":
-                print(f"Unexpected first message from HuRI: {init_msg!r}")
-                return
-
-            user_id = init_msg["user_id"]
-            print(f"Session started with _user_id: {user_id}")
-
-            receive_task = asyncio.create_task(self._receive_loop(ws=ws))
-            await asyncio.gather(
-                *(sender.input_loop(ws=ws) for sender in self.senders),
-            )
-
-            receive_task.cancel()
+                # from_wire is the decoding contract for both wire shapes.
+                event = sub.event_cls.from_wire(data)
+            except Exception:
+                logger.exception("cannot decode %r frame as %s", topic, sub.event_cls)
+                continue
+            for handler in sub.handlers:
+                try:
+                    await handler(event)
+                except Exception:
+                    logger.exception("handler for %r failed", topic)

@@ -297,10 +297,10 @@ scripts/test_install.sh            # run the installer in clean Ubuntu container
 - **root** — entrypoints: `huri_core/app.py`, `huri_core/launch_huri.py` (server),
   `huri_core/client.py` (client)
 - **huri_core/core** — `huri` (ingress + per-session router), `bus` (event graph),
-  `client` / `interface`, `module`, `session`, `events`, `plugins` (module and
+  `client` (the client SDK, `HuRIClient`), `module`, `session`, `events`, `plugins` (module and
   event discovery), `user_config`, `dataclasses/config`
-- **huri_core/interfaces** — `cli_interface`: the reference client senders (audio,
-  text) and hooks (token, audio, motion)
+- **huri_core/interfaces** — `cli_interface`: the reference CLI client built on
+  the client SDK (microphone and prompt in; token, audio, motion out)
 - **huri_core/modules**
   - `speech_to_text` — `microphone_vad` (VAD), `speech_to_text` (STT),
     `text_aggregator` (TAG)
@@ -345,6 +345,39 @@ configs do. A module that is not packaged at all can be tried by import path:
 list it in `HURI_MODULES` (`HURI_MODULES=stt,my_pkg.servo:Servo`) and reference
 it from the client config with `module: my_pkg.servo:Servo` instead of `name:`.
 A client can never make the server import a path the server did not list.
+
+## Client SDK
+
+`huri_core.core.client.HuRIClient` (`pip install "huri-core[client]"`) is all a
+use case needs to talk to a server: it owns the websocket, the session
+handshake and the wire encoding, and calls your handlers.
+
+```python
+from huri_core.core.client import HuRIClient
+from huri_core.modules.rag.events import RAGQuestion
+from huri_core.modules.speech_to_text.events import Transcript
+from huri_core.modules.text_to_speech.events import Token
+
+
+async def print_token(token: Token) -> None:
+    print(token.text, end="", flush=True)
+
+
+client = HuRIClient(
+    "ws://localhost:8000/session",
+    modules={"rag": {"name": "rag"}},
+    sends=["huri.question"],
+)
+client.on("huri.token", Token, print_token)  # before connecting
+async with client:
+    await client.send("huri.question", RAGQuestion(Transcript("Hello!", True), None))
+    await client.wait_closed()
+```
+
+Handlers of one topic run in arrival order; different topics run concurrently.
+A client YAML (`config/client_*.yaml`) holds the same three things — `modules`,
+`send` and `subscribe` — and the reference CLI (`python -m huri_core.client
+--config ...`) adds its device settings under `cli:`.
 
 ## Developper Documentation
 

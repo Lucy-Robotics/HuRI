@@ -33,6 +33,5 @@ def test_shipped_client_configs_use_registered_topics(path):
     raw = OmegaConf.to_container(OmegaConf.load(path), resolve=True)
     config = ClientConfig.from_dict({**raw, "user_id": "test"})
     events = load_events()
-    used = [s.topic for s in config.senders.values()]
-    used += [t for hook in config.hooks.values() for t in hook.topics]
+    used = config.send + config.subscribe
     assert used and all(topic in events for topic in used), used

@@ -26,65 +26,50 @@ class ModuleConfig:
             )
         return self(name=name, args=raw.get("args", {}), module=module)
 
-
-@dataclass
-class ClientHookConfig:
-    name: str
-    topics: List[str]
-    args: Mapping[str, Any]
-
-    @classmethod
-    def from_dict(self, raw: dict) -> "ClientHookConfig":
-        return self(
-            name=raw["name"],
-            topics=raw["topics"],
-            args=raw.get("args", {}),
-        )
-
-
-@dataclass
-class ClientSenderConfig:
-    name: str
-    topic: str
-    args: Mapping[str, Any]
-
-    @classmethod
-    def from_dict(self, raw: dict) -> "ClientSenderConfig":
-        return self(
-            name=raw["name"],
-            topic=raw["topic"],
-            args=raw.get("args", {}),
-        )
+    def to_dict(self) -> Dict[str, Any]:
+        raw: Dict[str, Any] = {"args": dict(self.args)}
+        if self.module is not None:
+            raw["module"] = self.module
+        else:
+            raw["name"] = self.name
+        return raw
 
 
 @dataclass
 class ClientConfig:
+    """A client session, as written in a client YAML and sent to the server as
+    the session handshake.
+
+    :modules: the session's pipeline.
+    :subscribe: topics the client receives.
+    :send: topics the client publishes (module inputs it provides).
+    """
+
     user_id: str
-    huri_url: str
-    interface_path: str
-    hooks: Dict[str, ClientHookConfig]
-    senders: Dict[str, ClientSenderConfig]
     modules: Dict[str, ModuleConfig]
+    subscribe: List[str]
+    send: List[str]
+    huri_url: str = ""
+
+    LEGACY_KEYS = ("interface_path", "senders", "hooks")
 
     @classmethod
     def from_dict(cls, raw: Dict) -> "ClientConfig":
-        hooks = {
-            hook_id: ClientHookConfig.from_dict(hok_raw)
-            for hook_id, hok_raw in raw.get("hooks", {}).items()
-        }
-        senders = {
-            sender_id: ClientSenderConfig.from_dict(snd_raw)
-            for sender_id, snd_raw in raw.get("senders", {}).items()
-        }
+        legacy = [k for k in cls.LEGACY_KEYS if k in raw]
+        if legacy:
+            raise ValueError(
+                f"client config uses the removed keys {legacy}: list the topics to "
+                "receive under `subscribe:` and the topics sent under `send:` "
+                "instead (see config/client_template.yaml)"
+            )
         modules = {
             module_id: ModuleConfig.from_dict(mod_raw)
             for module_id, mod_raw in raw.get("modules", {}).items()
         }
         return cls(
             user_id=raw["user_id"],
-            huri_url=raw["huri_url"],
-            interface_path=raw["interface_path"],
-            hooks=hooks,
-            senders=senders,
+            huri_url=raw.get("huri_url", ""),
             modules=modules,
+            subscribe=list(raw.get("subscribe", [])),
+            send=list(raw.get("send", [])),
         )

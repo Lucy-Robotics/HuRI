@@ -1,8 +1,16 @@
+"""The reference command-line client: microphone and text prompt in, speech,
+text and gesture logs out. Built on the client SDK (HuRIClient).
+
+Topics it can send and receive are the keys of SENDERS and RECEIVERS; the
+client config picks among them with `send:` and `subscribe:`, and its `cli:`
+section holds the device settings.
+"""
+
 import asyncio
 import os
 import wave
 from datetime import datetime
-from typing import Dict, List, Optional, Type
+from typing import Any, Awaitable, Callable, Dict, List, Mapping, Optional, Tuple, Type
 
 import numpy as np
 import sounddevice as sd
@@ -10,83 +18,70 @@ from prompt_toolkit import PromptSession
 from prompt_toolkit.patch_stdout import patch_stdout
 from scipy.signal import resample
 
-from huri_core.core.client import ClientHook, ClientSender
-from huri_core.core.events import BytesEvent
-from huri_core.core.interface import Interface
+from huri_core.core.client import HuRIClient, HuRISessionError
+from huri_core.core.dataclasses.config import ClientConfig
+from huri_core.core.events import BytesEvent, EventData
 from huri_core.modules.gesture.events import Motion
 from huri_core.modules.rag.events import RAGQuestion
 from huri_core.modules.speech_to_text.events import Transcript
 from huri_core.modules.text_to_speech.events import Audio, Token
 
+# --- senders: coroutines feeding a topic until they return -------------------
 
-class AudioSender(ClientSender[BytesEvent]):
-    def __init__(
-        self, sample_rate: int = 16000, frame_duration: float = 0.030, **kwargs
+
+async def send_microphone(
+    client: HuRIClient,
+    topic: str,
+    sample_rate: int = 16000,
+    frame_duration: float = 0.030,
+) -> None:
+    loop = asyncio.get_running_loop()
+    queue: asyncio.Queue[np.ndarray] = asyncio.Queue()
+
+    def callback(indata: np.ndarray, frames, time, status):
+        loop.call_soon_threadsafe(queue.put_nowait, indata.copy())
+
+    with sd.InputStream(
+        samplerate=sample_rate,
+        channels=1,
+        dtype="int16",
+        callback=callback,
+        blocksize=int(sample_rate * frame_duration),
     ):
-        super().__init__(**kwargs)
-
-        self.sample_rate = sample_rate
-        self.frame_size = int(sample_rate * frame_duration)
-
-    async def input_loop(self, ws):
-        loop = asyncio.get_running_loop()
-
-        queue: asyncio.Queue[np.ndarray] = asyncio.Queue()
-
-        def callback(indata: np.ndarray, frames, time, status):
-            loop.call_soon_threadsafe(queue.put_nowait, indata.copy())
-
-        with sd.InputStream(
-            samplerate=self.sample_rate,
-            channels=1,
-            dtype="int16",
-            callback=callback,
-            blocksize=self.frame_size,
-        ):
-            while True:
-                chunk = await queue.get()
-                await self.send(ws, BytesEvent(data=chunk.tobytes()))
+        while True:
+            chunk = await queue.get()
+            await client.send(topic, BytesEvent(data=chunk.tobytes()))
 
 
-class TextSender(ClientSender[RAGQuestion]):
-    output_type = RAGQuestion
-
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-
-    async def input_loop(self, ws):
-        print("'\\exit' or CTRL+D/C to exit.")
-        session: PromptSession = PromptSession()
-        try:
-            while True:
-                with patch_stdout():
-                    text = await session.prompt_async(">> ")
-                if text == "\\exit":
-                    return
-                await self.send(ws, RAGQuestion(Transcript(text, True), None))
-
-        except (EOFError, KeyboardInterrupt):
-            pass
-        finally:
-            print("TextSender Exited...")
+async def send_prompt(client: HuRIClient, topic: str) -> None:
+    print("'\\exit' or CTRL+D/C to exit.")
+    session: PromptSession = PromptSession()
+    try:
+        while True:
+            with patch_stdout():
+                text = await session.prompt_async(">> ")
+            if text == "\\exit":
+                return
+            await client.send(topic, RAGQuestion(Transcript(text, True), None))
+    except (EOFError, KeyboardInterrupt):
+        pass
+    finally:
+        print("Prompt exited...")
 
 
-class AudioHook(ClientHook[Audio]):
-    input_type = Audio
+# --- receivers -----------------------------------------------------------------
+
+
+class AudioPlayer:
+    """Plays `huri.audio.out` on the default output device, optionally saving
+    each utterance as a WAV file."""
 
     def __init__(
         self,
-        # Defaulted, because the body already treats it as optional ("" = do
-        # not save). Hooks are constructed as available_hooks[name](**hook.args)
-        # from the yaml, so a required parameter here is a hard TypeError at
-        # client startup for every config that omits the key — which was all of
-        # them except client_text.yaml.
         save_audio_dir: str = "",
-        sample_rate=48000,
-        incoming_sample_rate=16000,
-        **kwargs,
+        sample_rate: int = 48000,
+        incoming_sample_rate: int = 16000,
     ):
-        super().__init__(**kwargs)
 
         print("Speaker:", sd.query_devices(kind="output"))
 
@@ -181,7 +176,7 @@ class AudioHook(ClientHook[Audio]):
             wav.setframerate(sample_rate)
             wav.writeframes(pcm.tobytes())
 
-    async def hook(self, data: Audio):
+    async def __call__(self, data: Audio) -> None:
         print(
             f"<< audio: pts={data.pts:.3f}s "
             f"samples={data.data.size} @ {data.sample_rate}Hz "
@@ -205,63 +200,95 @@ class AudioHook(ClientHook[Audio]):
             self._collect_audio(data.data, data.sample_rate, bool(data.end))
 
 
-class TextHook(ClientHook[RAGQuestion]):
-    input_type = RAGQuestion
-
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-
-    async def hook(self, data: RAGQuestion):
-        print("<<", data.transcript, data.emotion)
+async def print_question(data: RAGQuestion) -> None:
+    print("<<", data.transcript, data.emotion)
 
 
-class TokenHook(ClientHook[Token]):
-    """Print the RAG's streamed reply token-by-token (topic ``token``).
-
-    This is the live text output of the pipeline (RAG -> Token). The website
-    backend consumes the same stream; the CLI just echoes each delta inline and
-    emits a newline on the end-of-utterance marker.
-    """
-
-    input_type = Token
-
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-
-    async def hook(self, data: Token):
-        if data.end:
-            print()
-        else:
-            print(data.text, end="", flush=True)
+async def print_token(data: Token) -> None:
+    """The RAG's streamed reply, token by token; newline at end of utterance."""
+    if data.end:
+        print()
+    else:
+        print(data.text, end="", flush=True)
 
 
-class MotionHook(ClientHook[Motion]):
-    input_type = Motion
+async def print_motion(data: Motion) -> None:
+    print(
+        f"<< motion: pts={data.pts:.3f}s frames={data.poses.shape[0]} @ {data.fps}fps"
+    )
 
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
 
-    async def hook(self, data: Motion):
-        print(
-            f"<< motion: pts={data.pts:.3f}s "
-            f"frames={data.poses.shape[0]} @ {data.fps}fps"
+Receiver = Callable[[Any], Awaitable[None]]
+
+# topic -> (event class, factory building the handler from the `cli:` settings)
+RECEIVERS: Dict[str, Tuple[Type[EventData], Callable[[Mapping], Receiver]]] = {
+    "huri.audio.out": (Audio, lambda cli: AudioPlayer(**cli.get("audio_out", {}))),
+    "huri.question": (RAGQuestion, lambda cli: print_question),
+    "huri.token": (Token, lambda cli: print_token),
+    "huri.motion": (Motion, lambda cli: print_motion),
+}
+
+# topic -> coroutine factory sending it
+SENDERS: Dict[str, Callable[[HuRIClient, str, Mapping], Awaitable[None]]] = {
+    "huri.audio.in": lambda client, topic, cli: send_microphone(
+        client, topic, **cli.get("audio_in", {})
+    ),
+    "huri.question": lambda client, topic, cli: send_prompt(client, topic),
+}
+
+
+def build_client(config: ClientConfig, cli: Mapping) -> HuRIClient:
+    unsupported = [t for t in config.send if t not in SENDERS]
+    unsupported += [t for t in config.subscribe if t not in RECEIVERS]
+    if unsupported:
+        raise ValueError(
+            f"the CLI cannot handle topic(s) {unsupported}. It sends "
+            f"{sorted(SENDERS)} and receives {sorted(RECEIVERS)}"
         )
+    client = HuRIClient(
+        config.huri_url,
+        modules={k: m.to_dict() for k, m in config.modules.items()},
+        sends=config.send,
+        user_id=config.user_id,
+    )
+    for topic in config.subscribe:
+        event_cls, make = RECEIVERS[topic]
+        client.on(topic, event_cls, make(cli))
+    return client
 
 
-class CLIInterface(Interface):
-    def __init__(self):
-        super().__init__(singletton=None)
-
-    def get_senders(self) -> Dict[str, Type[ClientSender]]:
-        return {"audio": AudioSender, "text": TextSender}
-
-    def get_hooks(self) -> Dict[str, Type[ClientHook]]:
-        return {
-            "audio": AudioHook,
-            "text": TextHook,
-            "token": TokenHook,
-            "motion": MotionHook,
-        }
-
-
-cli_interface = CLIInterface()
+async def run_cli(config: ClientConfig, cli: Optional[Mapping] = None) -> None:
+    cli = cli or {}
+    client = build_client(config, cli)
+    try:
+        await client.connect()
+    except HuRISessionError as e:
+        print(f"HuRI rejected this client config: {e.error}")
+        if e.server_modules:
+            print(f"  server registered : {', '.join(e.server_modules)}")
+            print(f"  this config wants : {', '.join(config.modules)}")
+        return
+    except OSError as e:
+        print(
+            f"Cannot reach HuRI at {config.huri_url}: {e}\n"
+            "  Check the server is deployed: .huri-local/status.sh\n"
+            "  Replica errors: /tmp/ray/session_latest/logs/serve/"
+        )
+        return
+    print(f"Session started with _user_id: {client.user_id}")
+    try:
+        loops: List[Awaitable[None]] = [
+            SENDERS[topic](client, topic, cli) for topic in config.send
+        ]
+        if loops:
+            # The session ends when a sender returns (e.g. `\\exit` at the prompt).
+            done, pending = await asyncio.wait(
+                [asyncio.ensure_future(loop) for loop in loops],
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+            for task in pending:
+                task.cancel()
+        else:
+            await client.wait_closed()
+    finally:
+        await client.close()

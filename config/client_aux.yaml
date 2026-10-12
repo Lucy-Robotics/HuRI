@@ -1,39 +1,19 @@
 huri_url: ws://localhost:8000/session
 
-interface_path: huri_core.interfaces.cli_interface:cli_interface
+# Topics this client publishes, and the ones it receives.
+send: [huri.audio.in, huri.question]
+subscribe: [huri.token, huri.audio.out, huri.motion]
 
-senders:
-  audio:
-    name: audio
-    topic: huri.audio.in
-    args:
-      sample_rate: 16000
-      frame_duration: 0.030
-  text:
-    name: text
-    topic: huri.question
-    args:
-      sample_rate: 16000
-      frame_duration: 0.030
-
-hooks:
-  token:
-    name: token
-    topics: [huri.token]
-  audio:
-    name: audio
-    topics: [huri.audio.out]
-    args:
-      incoming_sample_rate: ${senders.text.args.sample_rate}
-      sample_rate: 44100
-      # Belongs to the audio hook, not motion: MotionHook swallows unknown
-      # kwargs silently, so parked under motion it would parse and then do
-      # nothing. It was also indented one level too deep, which made the whole
-      # file invalid YAML.
-      save_audio_dir: "uuid"
-  motion:
-    name: motion
-    topics: [huri.motion]
+# Device settings of the CLI client (huri_core.interfaces.cli_interface);
+# the server never reads them.
+cli:
+  audio_in:
+    sample_rate: 16000
+    frame_duration: 0.030
+  audio_out:
+    incoming_sample_rate: ${cli.audio_in.sample_rate}
+    sample_rate: 44100
+    save_audio_dir: "uuid"
 
 modules:
   vad:
@@ -41,12 +21,12 @@ modules:
     args:
       vad_agressiveness: 3
       silence_duration: 1.5
-      block_duration: ${senders.audio.args.frame_duration}
+      block_duration: ${cli.audio_in.frame_duration}
   stt:
     name: stt
     args:
       language: en
-      block_duration: ${senders.audio.args.frame_duration}
+      block_duration: ${cli.audio_in.frame_duration}
     logging: INFO
   tag:
     name: tag
@@ -56,7 +36,7 @@ modules:
   emo:
     name: emo
     args:
-      block_duration: ${senders.audio.args.frame_duration}
+      block_duration: ${cli.audio_in.frame_duration}
   eag:
     name: eag
   qag:

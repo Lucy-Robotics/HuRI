@@ -1,16 +1,8 @@
 huri_url: ws://localhost:8000/session
 
-interface_path: huri_core.interfaces.cli_interface:cli_interface
-
-senders:
-  text:
-    name: text
-    topic: huri.question
-
-hooks:
-  token:
-    name: token
-    topics: [huri.token]
+# Topics this client publishes, and the ones it receives.
+send: [huri.question]
+subscribe: [huri.token]
 
 modules:
   rag:

@@ -112,6 +112,6 @@ def test_shipped_client_configs_are_complete_sessions(path):
     pipeline = [stub(modules[m.key]) for m in config.modules.values()]
     check_session(
         pipeline,
-        sent=[s.topic for s in config.senders.values()],
-        subscribed=[t for h in config.hooks.values() for t in h.topics],
+        sent=config.send,
+        subscribed=config.subscribe,
     )

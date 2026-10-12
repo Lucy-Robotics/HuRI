@@ -78,20 +78,18 @@ class HuRI:
         """
         await ws.accept()
         client_config_raw: Dict = await ws.receive_json()
-        client_config = ClientConfig.from_dict(client_config_raw)
 
-        topic_list = [
-            topic
-            for hook_config in client_config.hooks.values()
-            for topic in hook_config.topics
-        ]
         try:
+            # Inside the try: a malformed or old-format handshake gets a
+            # session_error back like any other rejection.
+            client_config = ClientConfig.from_dict(client_config_raw)
+            topic_list = client_config.subscribe
             pipeline: List[Module] = self.module_factory.create_from_config(
                 client_config.user_id, client_config.modules
             )
             check_session(
                 pipeline,
-                sent=[sender.topic for sender in client_config.senders.values()],
+                sent=client_config.send,
                 subscribed=topic_list,
             )
         except Exception as e:
@@ -103,7 +101,8 @@ class HuRI:
                 }
             )
             await ws.close(code=1008, reason="invalid session config")
-            print(f"[HuRI] rejected session for {client_config.user_id}: {e}")
+            user = client_config_raw.get("user_id", "<no user_id>")
+            print(f"[HuRI] rejected session for {user}: {e}")
             return
 
         senders: List[Module] = [Sender(ws, topic) for topic in topic_list]
