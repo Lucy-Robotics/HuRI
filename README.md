@@ -275,13 +275,15 @@ Note that `requirements.txt` also contains the lint/test toolchain.
 client never installs Ray or FastAPI:
 
 ```sh
-pip install "huri-core[client] @ git+https://github.com/Lucy-Robotics/HuRI.git"   # client SDK only
-pip install "huri-events @ git+https://github.com/Lucy-Robotics/HuRI.git#subdirectory=packages/huri-events"   # the curated events
+pip install "huri-core[client] @ git+https://github.com/Lucy-Robotics/HuRI.git@dev"   # client SDK only
+pip install "huri-events @ git+https://github.com/Lucy-Robotics/HuRI.git@dev#subdirectory=packages/huri-events"   # the curated events
 pip install -e examples/cli                                                        # + the reference CLI (huri-cli)
 pip install -c constraints.txt -e ".[server,tts,dev]"                              # server (+ TTS, still in core)
 for p in packages/*/; do pip install -c constraints.txt -e "$p"; done              # curated events and modules
 ```
 
+Replace `@dev` with a release tag (`@0.4.0`, ...) to pin a version; without
+a ref pip would take the repository's default branch.
 `[server]` is Ray Serve + FastAPI and the pins that keep them working; each
 module package declares its own dependencies, and the GPU ones ship
 `requirements-{nvidia,amd}.txt` pins next to it.
@@ -316,7 +318,7 @@ stt = ModuleHarness(STT, handle=LocalHandle(FakeWhisper()), language="en")
 assert stt.run(Voice(frames), Voice(None))[-1] == Transcript("hello", True)
 ```
 
-See `tests/speech_to_text/test_stt_tag.py` and `tests/core/test_testing.py`.
+See `packages/huri-module-stt/tests/test_stt.py` and `tests/core/test_testing.py`.
 
 ## Folder/Module structure
 
