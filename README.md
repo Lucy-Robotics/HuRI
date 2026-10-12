@@ -318,7 +318,7 @@ stt = ModuleHarness(STT, handle=LocalHandle(FakeWhisper()), language="en")
 assert stt.run(Voice(frames), Voice(None))[-1] == Transcript("hello", True)
 ```
 
-See `tests/speech_to_text/test_stt_tag.py` and `tests/core/test_testing.py`.
+See `packages/huri-module-stt/tests/test_stt.py` and `tests/core/test_testing.py`.
 
 ## Folder/Module structure
 
