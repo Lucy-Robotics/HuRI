@@ -37,7 +37,7 @@ def test_its_manifest_matches_the_module(template_on_path):
     from huri_example.module import Shouter
 
     manifest = load_manifest(TEMPLATE / "huri_example" / "huri_module.toml")
-    assert manifest.name == "shout"
+    assert manifest.name == "example"
     assert (manifest.input.topic, manifest.output.topic) == (
         Shouter.input_type,
         Shouter.output_type,
@@ -57,6 +57,11 @@ def test_rename_leaves_no_trace_of_the_example(tmp_path):
     )
     assert (copy / "huri_servo" / "module.py").is_file()
     assert (copy / "events" / "huri_events_servo" / "__init__.py").is_file()
+    # The module itself is renamed: its entry point and manifest.
+    assert (
+        'servo = "huri_servo.module:Shouter"' in (copy / "pyproject.toml").read_text()
+    )
+    assert 'name = "servo"' in (copy / "huri_servo" / "huri_module.toml").read_text()
     leftovers = subprocess.run(
         ["grep", "-rlI", "--exclude=rename.sh", "-i", "example", str(copy)],
         capture_output=True,
