@@ -1344,23 +1344,6 @@ install_python_deps() {
   # setuptools and relying on a later resolution to walk it back.
   local C=(-c "$REPO_ROOT/constraints.txt")
 
-  # What each planned module declares for this host's hardware
-  # (packages/*/pyproject.toml + requirements-<variant>.txt; the variant is the
-  # host's since the torch build is shared). Merged, and checked for modules
-  # pinning one package to different versions, before anything heavy is
-  # installed; the merged file itself is installed last (step 7).
-  local variant=cpu
-  [[ "$GPU_VENDOR" == "nvidia" || "$GPU_VENDOR" == "amd" ]] && variant="$GPU_VENDOR"
-  local modules_req="$STATE_DIR/requirements-modules.generated.txt" merged
-  if ! merged="$("$PY_BIN" "$REPO_ROOT/scripts/module_requirements.py" \
-                  --variant "$variant" --modules "$(served_modules)" 2>&1)"; then
-    err "the planned modules cannot be installed together on this $variant host:"
-    local line
-    while IFS= read -r line; do note "$line"; done <<<"$merged"
-    die "fix the pins in packages/*/requirements-$variant.txt, or leave a module out with --modules"
-  fi
-  (( DRY_RUN )) || printf '%s\n' "$merged" | write_file "$modules_req"
-
   run "$PIP" install "${C[@]}" --upgrade pip setuptools wheel
 
   # ABI tag of the interpreter that will actually receive the wheels. The ROCm
@@ -1392,6 +1375,24 @@ install_python_deps() {
     P_RAY_GPUS=0
     [[ "$P_EMO_DEV" != "off" ]] && P_EMO_DEV="cpu"
   fi
+
+  # What each planned module declares for this host's hardware — decided
+  # after the ROCm fallback above, which can turn an AMD host into a CPU one
+  # (packages/*/pyproject.toml + requirements-<variant>.txt; the variant is the
+  # host's since the torch build is shared). Merged, and checked for modules
+  # pinning one package to different versions, before anything heavy is
+  # installed; the merged file itself is installed last (step 7).
+  local variant=cpu
+  [[ "$GPU_VENDOR" == "nvidia" || "$GPU_VENDOR" == "amd" ]] && variant="$GPU_VENDOR"
+  local modules_req="$STATE_DIR/requirements-modules.generated.txt" merged
+  if ! merged="$("$PY_BIN" "$REPO_ROOT/scripts/module_requirements.py" \
+                  --variant "$variant" --modules "$(served_modules)" 2>&1)"; then
+    err "the planned modules cannot be installed together on this $variant host:"
+    local line
+    while IFS= read -r line; do note "$line"; done <<<"$merged"
+    die "fix the pins in packages/*/requirements-$variant.txt, or leave a module out with --modules"
+  fi
+  (( DRY_RUN )) || printf '%s\n' "$merged" | write_file "$modules_req"
 
   # 1. Vendor torch FIRST, so every later resolution (sentence-transformers,
   #    transformers, faster-whisper) sees a satisfying torch and does not pull
@@ -2159,7 +2160,7 @@ EOF
     echo "      max_length: 1024"
     echo "    logging: INFO"
     if [[ "$P_TTS_DEV" != "off" ]]; then
-      echo "  tts:"
+      echo "  $(tts_module):"
       echo "    name: $(tts_module)"
       # No args: TTS.__init__ takes only the deployment handle, and modules
       # are built with **cfg.args — so any key here is a hard TypeError at
