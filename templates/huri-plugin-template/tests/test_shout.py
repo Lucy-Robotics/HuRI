@@ -18,9 +18,9 @@ def test_shouts_finished_transcripts_only():
 
 def test_installed_module_passes_the_server_checks():
     """What the server verifies at startup: entry point, events, manifest."""
-    modules = load_modules(["shout"])
+    modules = load_modules(["example"])
     events = load_events()
     check_modules(modules, events)
-    manifest = find_manifest("shout")
+    manifest = find_manifest("example")
     assert manifest is not None
-    check_manifests(modules, {"shout": manifest}, events)
+    check_manifests(modules, {"example": manifest}, events)

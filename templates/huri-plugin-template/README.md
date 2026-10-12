@@ -6,8 +6,8 @@ pipeline. Copy it (GitHub: "Use this template"), then:
 
 ```sh
 ./rename.sh servo                       # your module's name, lowercase
-pip install "huri-core[server] @ git+https://github.com/Lucy-Robotics/HuRI.git" \
-            "huri-events @ git+https://github.com/Lucy-Robotics/HuRI.git#subdirectory=packages/huri-events"
+pip install "huri-core[server] @ git+https://github.com/Lucy-Robotics/HuRI.git@dev" \
+            "huri-events @ git+https://github.com/Lucy-Robotics/HuRI.git@dev#subdirectory=packages/huri-events"
 ./install.sh                            # picks requirements-{cpu,nvidia,amd}.txt for this machine
 pytest                                  # tests/ runs the module with huri_core.testing
 ```
@@ -18,7 +18,7 @@ pytest                                  # tests/ runs the module with huri_core.
 |---|---|
 | `huri_example/module.py` | the module: a `Module` subclass with its input/output topics and `process()` |
 | `huri_example/huri_module.toml` | its manifest, read by HuRI's startup check and the hub |
-| `pyproject.toml` | the `huri.modules` entry point (`shout = ...`) and the dependencies |
+| `pyproject.toml` | the `huri.modules` entry point (`example = ...`; `rename.sh` renames it with everything else) and the dependencies |
 | `events/` | the events the module introduces, as their own light distribution in their own topic namespace (`example.*`) — so a client can decode them without installing the module |
 | `tests/` | the module tested alone (`ModuleHarness`), and the checks the server runs at startup |
 | `requirements-{cpu,nvidia,amd}.txt`, `install.sh` | hardware-specific pins, and the script choosing them |
@@ -29,13 +29,13 @@ pytest                                  # tests/ runs the module with huri_core.
 Installed on the server, the module is known by its entry point name:
 
 ```sh
-HURI_MODULES=stt,tag,shout ...          # the server's allow-list
+HURI_MODULES=stt,tag,example ...        # the server's allow-list
 ```
 
 ```yaml
 # client config
 modules:
-  shout: { name: shout, args: { exclamations: 2 } }
+  example: { name: example, args: { exclamations: 2 } }
 subscribe: [example.shout]
 ```
 
