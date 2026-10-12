@@ -438,7 +438,8 @@ huri hub search gesture             # GitHub repositories tagged `huri-module`
 huri hub list                       # modules supporting the installed huri-core
 huri hub list --verified            # only the curated registry (huri-modules)
 huri hub list --core 0.5.0 --all    # another version; --all keeps unsupported ones
-huri hub install servo              # pip-installs it; does not enable it
+huri hub install stt                # pip-installs a verified module; never enables it
+huri hub install servo --community  # an unreviewed one: only when asked explicitly
 ```
 
 `list` merges the verified registry with community modules, read from their
@@ -446,7 +447,10 @@ huri hub install servo              # pip-installs it; does not enable it
 keeps those whose manifest supports the huri-core version. Nothing found is
 ever loaded: enabling a module stays the server operator's `HURI_MODULES`
 decision. `GITHUB_TOKEN` raises GitHub's rate limit; `--registry` (or
-`HURI_REGISTRY`) points at another `registry.toml`.
+`HURI_REGISTRY`) points at another `registry.toml`. Outside a checkout, the
+registry is read from — and verified modules installed from — one git ref of
+the HuRI repository: the release tag of the installed huri-core, `dev` for a
+development build, or `HURI_REF`. It needs `huri-core[client]`.
 
 ### Module manifest (`huri_module.toml`)
 

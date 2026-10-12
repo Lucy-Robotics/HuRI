@@ -26,10 +26,25 @@ from .core.manifest import ManifestError, loads_manifest, loads_toml
 GITHUB_API = "https://api.github.com"
 RAW = "https://raw.githubusercontent.com/{repo}/{ref}/{path}"
 HURI_REPO = "Lucy-Robotics/HuRI"
-DEFAULT_REGISTRY = RAW.format(
-    repo=HURI_REPO, ref="main", path="huri-modules/registry.toml"
-)
+REGISTRY_PATH = "huri-modules/registry.toml"
 TOPIC = "huri-module"
+
+
+def huri_ref() -> str:
+    """The git ref of the HuRI repository the registry is read from and its
+    modules installed from — one ref for both, so what is installed is what
+    the registry describes. HURI_REF overrides; otherwise the release tag of
+    the installed huri-core, or `dev` for a development build."""
+
+    if os.environ.get("HURI_REF"):
+        return os.environ["HURI_REF"]
+    version = installed_core_version()
+    return "dev" if "dev" in version or "+" in version else version
+
+
+def default_registry() -> str:
+    return RAW.format(repo=HURI_REPO, ref=huri_ref(), path=REGISTRY_PATH)
+
 
 # url -> text, or None when the resource does not exist (HTTP 404).
 Fetch = Callable[[str], Optional[str]]
@@ -104,7 +119,7 @@ def load_registry(location: str, fetch: Fetch = http_fetch) -> List[HubModule]:
                 install = str(checkout / source["path"])
             else:
                 install = (
-                    f"git+https://github.com/{HURI_REPO}.git"
+                    f"git+https://github.com/{HURI_REPO}.git@{huri_ref()}"
                     f"#subdirectory={source['path']}"
                 )
             where = source["path"]
@@ -221,7 +236,7 @@ def _registry_location(option: Optional[str]) -> str:
     if os.environ.get("HURI_REGISTRY"):
         return os.environ["HURI_REGISTRY"]
     local = find_local_registry(Path.cwd())
-    return str(local) if local else DEFAULT_REGISTRY
+    return str(local) if local else default_registry()
 
 
 def cmd_search(args: Any, fetch: Fetch, out: Callable[[str], None]) -> int:
@@ -234,6 +249,12 @@ def cmd_search(args: Any, fetch: Fetch, out: Callable[[str], None]) -> int:
 
 def cmd_list(args: Any, fetch: Fetch, out: Callable[[str], None]) -> int:
     core = args.core or installed_core_version()
+    from packaging.version import InvalidVersion, Version
+
+    try:
+        Version(core)
+    except InvalidVersion as e:
+        raise HubError(f"invalid huri-core version {core!r}") from e
     registry = load_registry(_registry_location(args.registry), fetch)
     community: List[HubModule] = []
     if not args.verified and not args.no_crawl:
@@ -261,17 +282,35 @@ def cmd_install(args: Any, fetch: Fetch, out: Callable[[str], None]) -> int:
         known = {
             m.name: m for m in load_registry(_registry_location(args.registry), fetch)
         }
-        if name not in known:
-            for repo in search(name, fetch):
-                known.update({m.name: m for m in read_repository(repo, fetch)})
-        if name not in known:
-            raise HubError(f"no module named {name!r} in the registry or on GitHub")
-        module = known[name]
+        if name in known:
+            module = known[name]
+            out(f"{name}: verified, from {module.source}")
+        else:
+            # Anyone can tag a repository and claim a name: never install an
+            # unreviewed one implicitly, nor pick one of several claimants.
+            candidates = [
+                m
+                for repo in search(name, fetch)
+                for m in read_repository(repo, fetch)
+                if m.name == name
+            ]
+            if not candidates:
+                raise HubError(f"no module named {name!r} in the registry or on GitHub")
+            if len(candidates) > 1:
+                listed = "\n".join(f"  {m.install}" for m in candidates)
+                raise HubError(
+                    f"{len(candidates)} community repositories provide {name!r}; "
+                    f"install one explicitly:\n{listed}"
+                )
+            module = candidates[0]
+            if not args.community:
+                raise HubError(
+                    f"{name!r} is a community module, not reviewed ({module.source}). "
+                    "Read its code first; install it with --community, or by URL: "
+                    f"huri hub install {module.install}"
+                )
+            out(f"{name}: community (not reviewed), from {module.source}")
         target = module.install
-        out(
-            f"{name}: {'verified' if module.verified else 'community (not reviewed)'}"
-            f", from {module.source}"
-        )
     command = [sys.executable, "-m", "pip", "install", target]
     out("$ " + " ".join(command))
     if not args.dry_run:
@@ -311,6 +350,11 @@ def main(argv: Optional[List[str]] = None, fetch: Fetch = http_fetch) -> int:
     p = sub.add_parser("install", help="pip-install a module (does not enable it)")
     p.add_argument("module", help="a module name, or a pip target (git+https://...)")
     p.add_argument("--dry-run", action="store_true")
+    p.add_argument(
+        "--community",
+        action="store_true",
+        help="allow a module that is not in the verified registry",
+    )
     p.add_argument("--registry", help="registry.toml path or URL")
     p.set_defaults(run=cmd_install)
 
@@ -320,4 +364,11 @@ def main(argv: Optional[List[str]] = None, fetch: Fetch = http_fetch) -> int:
         return code
     except HubError as e:
         print(f"huri hub: {e}", file=sys.stderr)
+        return 1
+    except ImportError as e:  # packaging / tomli: the [client] extra
+        print(
+            f"huri hub: {e}. It needs huri-core's client extra: "
+            'pip install "huri-core[client]"',
+            file=sys.stderr,
+        )
         return 1

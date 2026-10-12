@@ -110,8 +110,15 @@ def test_install_a_verified_module_from_a_checkout(capsys):
     assert "not enabled" in out and "HURI_MODULES" in out
 
 
-def test_install_a_community_module_says_it_is_not_reviewed(capsys):
-    code, out = run(["install", "servo", "--dry-run", "--registry", REGISTRY], capsys)
+def test_a_community_module_is_only_installed_on_request(capsys):
+    code = hub.main(
+        ["install", "servo", "--dry-run", "--registry", REGISTRY], fetch=fetch
+    )
+    err = capsys.readouterr().err
+    assert code == 1 and "not reviewed" in err and "--community" in err
+
+    argv = ["install", "servo", "--dry-run", "--community", "--registry", REGISTRY]
+    code, out = run(argv, capsys)
     assert code == 0 and "community (not reviewed)" in out
     assert "pip install git+https://github.com/acme/huri-module-servo.git" in out
 
@@ -131,7 +138,7 @@ def test_remote_registry_installs_from_the_huri_repository():
         "https://example.org/registry.toml", fetch=lambda u: text
     )
     stt = next(m for m in modules if m.name == "stt")
-    repo = "git+https://github.com/Lucy-Robotics/HuRI.git"
+    repo = f"git+https://github.com/Lucy-Robotics/HuRI.git@{hub.huri_ref()}"
     assert stt.install == f"{repo}#subdirectory=packages/huri-module-stt"
 
 
@@ -144,3 +151,51 @@ def test_a_missing_registry_is_a_readable_error(capsys):
     argv = ["list", "--registry", "https://example.org/none.toml"]
     assert hub.main(argv, fetch=lambda url: None) == 1
     assert "no registry at" in capsys.readouterr().err
+
+
+def test_a_name_claimed_by_several_repositories_is_refused(capsys, monkeypatch):
+    twin = dict(SEARCH["items"][0], full_name="mallory/huri-module-servo")
+    twin["html_url"] = "https://github.com/mallory/huri-module-servo"
+    web = dict(WEB)
+    web[raw("mallory/huri-module-servo", "pyproject.toml")] = SERVO_PYPROJECT
+    web[raw("mallory/huri-module-servo", "huri_servo/huri_module.toml")] = (
+        SERVO_MANIFEST
+    )
+
+    def two_claimants(url):
+        if url.startswith(f"{hub.GITHUB_API}/search/repositories"):
+            return json.dumps({"items": SEARCH["items"] + [twin]})
+        return web.get(url)
+
+    argv = ["install", "servo", "--dry-run", "--community", "--registry", REGISTRY]
+    assert hub.main(argv, fetch=two_claimants) == 1
+    err = capsys.readouterr().err
+    assert "2 community repositories provide 'servo'" in err
+    assert "acme/huri-module-servo" in err and "mallory/huri-module-servo" in err
+
+
+def test_an_invalid_core_version_is_a_readable_error(capsys):
+    assert (
+        hub.main(["list", "--core", "zero.four", "--registry", REGISTRY], fetch=fetch)
+        == 1
+    )
+    assert "invalid huri-core version 'zero.four'" in capsys.readouterr().err
+
+
+def test_registry_and_installs_use_one_ref(monkeypatch):
+    monkeypatch.setattr(hub, "installed_core_version", lambda: "0.4.0")
+    assert hub.huri_ref() == "0.4.0"
+    assert "/0.4.0/huri-modules/registry.toml" in hub.default_registry()
+    monkeypatch.setattr(hub, "installed_core_version", lambda: "0.5.0.dev0")
+    assert hub.huri_ref() == "dev"
+    monkeypatch.setenv("HURI_REF", "my-branch")
+    assert hub.huri_ref() == "my-branch"
+
+
+def test_missing_client_extra_is_explained(capsys, monkeypatch):
+    def needs_packaging(*_):
+        raise ModuleNotFoundError("No module named 'packaging'")
+
+    monkeypatch.setattr(hub, "cmd_list", needs_packaging)
+    assert hub.main(["list"], fetch=fetch) == 1
+    assert 'pip install "huri-core[client]"' in capsys.readouterr().err
