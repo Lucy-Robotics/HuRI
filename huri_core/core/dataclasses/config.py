@@ -1,18 +1,30 @@
 from dataclasses import dataclass
-from typing import Any, Dict, List, Mapping
+from typing import Any, Dict, List, Mapping, Optional
 
 
 @dataclass
 class ModuleConfig:
-    name: str
+    """A module of the session's pipeline, given either by registered `name`
+    (an installed `huri.modules` entry point) or by `module` import path
+    (`my_pkg.servo:Servo`, which the server must list in HURI_MODULES)."""
+
+    name: Optional[str]
     args: Mapping[str, Any]
+    module: Optional[str] = None
+
+    @property
+    def key(self) -> str:
+        """What the server's module registry is looked up with."""
+        return self.module or self.name or ""
 
     @classmethod
     def from_dict(self, raw: dict) -> "ModuleConfig":
-        return self(
-            name=raw["name"],
-            args=raw.get("args", {}),
-        )
+        name, module = raw.get("name"), raw.get("module")
+        if (name is None) == (module is None):
+            raise ValueError(
+                f"a module entry needs exactly one of 'name' or 'module': {raw!r}"
+            )
+        return self(name=name, args=raw.get("args", {}), module=module)
 
 
 @dataclass

@@ -33,8 +33,12 @@ hooks:
 modules:
   # module tag can be anything
   example:
-    # module name must be in the list of available module in HuRI's instance (huri_core.modules.modules:get_modules)
+    # module name must be in the list of available module in HuRI's instance (its installed `huri.modules` entry points)
     name: my_module
     # if my_module init with "model", "sample_rate" and "hello" params, they can be customized here
     args:
       hello: world
+  # a module that is not packaged can be given by import path instead of name;
+  # the server must list that exact path in its HURI_MODULES
+  # unpackaged:
+  #   module: my_pkg.servo:Servo

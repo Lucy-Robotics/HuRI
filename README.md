@@ -107,8 +107,9 @@ scripts/install_local.sh --tts-engine cosyvoice --voice-sample me.wav \
 scripts/install_local.sh --force-tts --force-gesture --force-emo
 ```
 
-`--modules` sets `HURI_MODULES`, which is what decides the module registry
-(`huri_core/modules/modules.py`) and therefore which Serve deployments exist. The
+`--modules` sets `HURI_MODULES`, which is what decides which of the installed
+modules the server registers (`huri_core/core/plugins.py`, see "Modules as
+plugins" below) and therefore which Serve deployments exist. The
 **client** config must list the same module names — a client asking for a module
 the server did not register is rejected with a `session_error` naming both sets.
 
@@ -295,8 +296,8 @@ scripts/test_install.sh            # run the installer in clean Ubuntu container
 - **root** — entrypoints: `huri_core/app.py`, `huri_core/launch_huri.py` (server),
   `huri_core/client.py` (client)
 - **huri_core/core** — `huri` (ingress + per-session router), `bus` (event graph),
-  `client` / `interface`, `module`, `session`, `events`, `user_config`,
-  `dataclasses/config`
+  `client` / `interface`, `module`, `session`, `events`, `plugins` (module and
+  event discovery), `user_config`, `dataclasses/config`
 - **huri_core/interfaces** — `cli_interface`: the reference client senders (audio,
   text) and hooks (token, audio, motion)
 - **huri_core/modules**
@@ -309,7 +310,29 @@ scripts/test_install.sh            # run the installer in clean Ubuntu container
   - `emotion` — `prosody_analysis` (EMO), `emotion_aggregator` (EAG)
   - `gesture` — `gesture` + the vendored `emage` model code
   - `utils` — `sender` (forwards events to clients)
-  - `factory`, `modules` — the module registry and `HURI_MODULES` filtering
+  - `factory` — builds a session's modules from the registry
+
+## Modules as plugins
+
+The server finds modules and events through Python entry points, so any
+installed package can provide them; nothing has to be added to this repo.
+HuRI's own modules are registered the same way, in `pyproject.toml`, which is
+why HuRI must be installed (`pip install -e .`, done by the installer and the
+images) and not just checked out.
+
+```toml
+[project.entry-points."huri.modules"]
+servo = "huri_servo.module:Servo"          # usable as `name: servo`
+
+[project.entry-points."huri.events"]
+"servo_angles" = "huri_servo.events:ServoAngles"
+```
+
+`HURI_MODULES` is the server's allow-list; unset, every installed module is
+registered. A module that is not packaged at all can be tried by import path:
+list it in `HURI_MODULES` (`HURI_MODULES=stt,my_pkg.servo:Servo`) and reference
+it from the client config with `module: my_pkg.servo:Servo` instead of `name:`.
+A client can never make the server import a path the server did not list.
 
 ## Developper Documentation
 

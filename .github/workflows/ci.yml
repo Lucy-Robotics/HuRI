@@ -120,7 +120,7 @@ jobs:
         run: |
           mypy --check-untyped-defs --follow-imports=silent \
             huri_core/core huri_core/interfaces huri_core/modules/text_to_speech \
-            huri_core/modules/speech_to_text huri_core/modules/factory.py huri_core/modules/modules.py
+            huri_core/modules/speech_to_text huri_core/modules/factory.py
 
   plan:
     name: installer plan (${{ matrix.name }})
@@ -238,6 +238,8 @@ jobs:
             --index-url https://download.pytorch.org/whl/cpu \
             torch==2.3.1 torchaudio==2.3.1
           pip install -c constraints.txt -r serve_requirements.txt -r requirements.txt
+          # Registers the modules and events (entry points) — HuRI finds them there.
+          pip install --no-deps -e .
       - run: pytest -q
       - name: the shipped client configs load through the real loader
         # Stricter than the `configs` job: this exercises ClientConfig.from_dict
@@ -260,8 +262,9 @@ jobs:
         run: |
           for mods in "" "rag" "vad,stt,tag,qag,rag" "vad,stt,tag,qag,rag,emo,eag,tts"; do
             HURI_MODULES="$mods" python -c "
-          import os, huri_core.modules.modules as m
-          got = m.get_modules()
+          import os
+          from huri_core.core.plugins import load_modules, parse_selection
+          got = load_modules(parse_selection(os.environ['HURI_MODULES']))
           print(f'HURI_MODULES={os.environ[\"HURI_MODULES\"]!r:42s} -> {len(got)} modules')
           "
           done

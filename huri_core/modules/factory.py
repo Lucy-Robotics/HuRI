@@ -66,7 +66,11 @@ class ModuleFactory:
     ) -> Module:
 
         if name not in self._registry:
-            raise ValueError(f"Unknown module '{name}'")
+            raise ValueError(
+                f"Unknown module '{name}'. This server registers "
+                f"{self.registered()} (an import path must be listed in its "
+                "HURI_MODULES)."
+            )
 
         module_cls = self._registry[name]
 
@@ -90,7 +94,7 @@ class ModuleFactory:
     ) -> List[Module]:
         modules: List[Module] = []
         for module_config in module_configs.values():
-            modules.append(self.create(user_id, module_config.name, module_config.args))
+            modules.append(self.create(user_id, module_config.key, module_config.args))
         if modules == []:
             raise Exception
 

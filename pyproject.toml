@@ -66,6 +66,30 @@ dev = [
 [project.urls]
 Repository = "https://github.com/Lucy-Robotics/HuRI"
 
+# Plugin registration (see huri_core/core/plugins.py). An installed package
+# adds modules and events the same way, from its own pyproject.toml.
+[project.entry-points."huri.modules"]
+vad = "huri_core.modules.speech_to_text.microphone_vad:VAD"
+stt = "huri_core.modules.speech_to_text.speech_to_text:STT"
+tag = "huri_core.modules.speech_to_text.text_aggregator:TAG"
+emo = "huri_core.modules.emotion.prosody_analysis:EMO"
+eag = "huri_core.modules.emotion.emotion_aggregator:EAG"
+qag = "huri_core.modules.rag.question_aggregator:QAG"
+rag = "huri_core.modules.rag.rag:RAG"
+tts = "huri_core.modules.text_to_speech.text_to_speech:TTS"
+mov = "huri_core.modules.gesture.gesture:MOV"
+
+[project.entry-points."huri.events"]
+"audio.in" = "huri_core.core.events:BytesEvent"  # inbound mic frames (raw int16 PCM)
+"audio.out" = "huri_core.modules.text_to_speech.events:Audio"
+"voice" = "huri_core.modules.speech_to_text.events:Voice"
+"transcript" = "huri_core.modules.speech_to_text.events:Transcript"
+"emotion" = "huri_core.modules.emotion.events:Emotion"
+"partial_question" = "huri_core.modules.rag.events:PartialQuestion"
+"question" = "huri_core.modules.rag.events:RAGQuestion"
+"token" = "huri_core.modules.text_to_speech.events:Token"
+"motion" = "huri_core.modules.gesture.events:Motion"
+
 [tool.setuptools.dynamic]
 # Single source of truth: huri_core/__init__.py. See RELEASING.md.
 version = { attr = "huri_core.__version__" }

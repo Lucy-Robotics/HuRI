@@ -1408,6 +1408,10 @@ install_python_deps() {
   run "$PIP" install "${C[@]}" -r "$REPO_ROOT/serve_requirements.txt"
   info "  base requirements"
   run "$PIP" install "${C[@]}" -r "$REPO_ROOT/requirements.txt"
+  # HuRI itself, editable: registers its modules and events (entry points),
+  # which is how the server finds them.
+  info "  huri-core (editable)"
+  run "$PIP" install "${C[@]}" --no-deps -e "$REPO_ROOT"
 
   # 3. (The ROCm CTranslate2 wheel is installed in step 1, alongside torch; the
   #    AMD requirements file is installed last, in step 5 — see the note there.)
@@ -1870,7 +1874,7 @@ applications:
         PYTHONPATH: "$pythonpath"
 
         # Only these modules are registered, so no deployment is created for the
-        # ones this machine cannot run (see huri_core/modules/modules.py).
+        # ones this machine cannot run (see huri_core/core/plugins.py).
         HURI_MODULES: "$P_MODULES"
 
         # --- STT (faster-whisper) ---
@@ -2508,7 +2512,7 @@ PY
   # The registry is what turns HURI_MODULES into Serve deployments; if it cannot
   # be built, `serve deploy` fails later with a much less obvious error.
   if out="$(cd "$REPO_ROOT" && HURI_MODULES="$P_MODULES" PYTHONWARNINGS=ignore \
-            "$VPY" -c 'import huri_core.modules.modules as m; print(len(m.get_modules()), "modules registered")' 2>&1 | tail -1)"; then
+            "$VPY" -c 'import os; from huri_core.core.plugins import load_modules, parse_selection; print(len(load_modules(parse_selection(os.environ.get("HURI_MODULES")))), "modules registered")' 2>&1 | tail -1)"; then
     ok "module registry builds: $out"
   else
     err "module registry failed to build (HURI_MODULES=$P_MODULES):"

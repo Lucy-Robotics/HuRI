@@ -80,3 +80,8 @@ COPY requirements-amd.txt /app
 RUN pip install --no-cache-dir -c /app/constraints.txt -r requirements-amd.txt
 
 COPY huri_core /app/huri_core
+# Install HuRI itself so its modules/events entry points are registered. Built
+# from a copy the build user owns: pip builds a local project in place.
+COPY --chown=ray pyproject.toml README.md LICENSE /tmp/huri-src/
+COPY --chown=ray huri_core /tmp/huri-src/huri_core
+RUN pip install --no-cache-dir --no-deps /tmp/huri-src && rm -rf /tmp/huri-src
