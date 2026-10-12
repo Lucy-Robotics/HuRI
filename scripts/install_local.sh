@@ -2132,7 +2132,7 @@ EOF
     echo "      max_length: 1024"
     echo "    logging: INFO"
     if [[ "$P_TTS_DEV" != "off" ]]; then
-      echo "  tts:"
+      echo "  $(tts_module):"
       echo "    name: $(tts_module)"
       # No args: TTS.__init__ takes only the deployment handle, and modules
       # are built with **cfg.args — so any key here is a hard TypeError at
