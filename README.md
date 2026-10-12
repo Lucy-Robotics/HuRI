@@ -360,6 +360,8 @@ See `tests/speech_to_text/test_stt_tag.py` and `tests/core/test_testing.py`.
 - **packages/huri-events** — `huri-events`, the curated event classes (one per
   `huri.*` topic, with its wire format): a separate, light distribution
   (huri-core + numpy) that clients install to decode the topics
+- **landing** — the code-free entry point: who should start where, the
+  architecture, how to contribute; laid out to become the `huri` repository
 - **huri-modules** — the curated-module registry (`registry.toml`, the
   "verified" index), its CI check, the listing criteria (`ACCEPTANCE.md`) and
   `install.sh`; laid out to become the `huri-modules` repository

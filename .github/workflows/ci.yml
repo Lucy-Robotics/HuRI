@@ -244,6 +244,8 @@ jobs:
       - run: pytest -q
       - name: the curated-module registry matches its packages
         run: python huri-modules/check_registry.py
+      - name: the landing pages and READMEs link to things that exist
+        run: python landing/check_links.py landing README.md huri-modules templates examples packages
       - name: the shipped client configs load through the real loader
         # Stricter than the `configs` job: this exercises ClientConfig.from_dict
         # and the sender/hook/module dataclasses, not just YAML syntax.
