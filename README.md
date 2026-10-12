@@ -21,7 +21,7 @@ Then, in a second terminal:
 
 ```sh
 source .huri-local/env.sh
-python -m huri_core.client --config config/client_local.generated.yaml
+huri-cli --config config/client_local.generated.yaml
 ```
 
 You get a `>>` prompt; typing or speaking both work. `\exit` quits the client
@@ -138,7 +138,7 @@ It generates:
 ```sh
 .huri-local/start.sh                 # services + ray head + serve deploy
 source .huri-local/env.sh
-python -m huri_core.client --config config/client_local.generated.yaml
+huri-cli --config config/client_local.generated.yaml
 .huri-local/status.sh                # what is up, locally and remotely
 .huri-local/stop.sh --all
 ```
@@ -239,10 +239,11 @@ a Serve `user_config`):
 python -m huri_core.launch_huri
 ```
 
-Client:
+Client — the reference CLI is its own package, [examples/cli](examples/cli):
 
 ```sh
-python -m huri_core.client --config config/client_local.generated.yaml
+pip install --no-deps -e examples/cli
+huri-cli --config config/client_local.generated.yaml
 ```
 
 Client config template: [config/client_template.yaml](config/client_template.yaml).
@@ -275,7 +276,7 @@ client never installs Ray or FastAPI:
 
 ```sh
 pip install "huri-core[client] @ git+https://github.com/Lucy-Robotics/HuRI.git"   # client SDK only
-pip install "huri-core[cli] @ git+https://github.com/Lucy-Robotics/HuRI.git"      # + the CLI client
+pip install -e examples/cli                                                        # + the reference CLI (huri-cli)
 pip install -c constraints.txt -e ".[modules,dev]"                                 # server + curated modules
 ```
 
@@ -294,13 +295,13 @@ scripts/test_install.sh            # run the installer in clean Ubuntu container
 
 ## Folder/Module structure
 
-- **root** — entrypoints: `huri_core/app.py`, `huri_core/launch_huri.py` (server),
-  `huri_core/client.py` (client)
+- **root** — server entrypoints: `huri_core/app.py`, `huri_core/launch_huri.py`
 - **huri_core/core** — `huri` (ingress + per-session router), `bus` (event graph),
   `client` (the client SDK, `HuRIClient`), `module`, `session`, `events`, `plugins` (module and
   event discovery), `user_config`, `dataclasses/config`
-- **huri_core/interfaces** — `cli_interface`: the reference CLI client built on
-  the client SDK (microphone and prompt in; token, audio, motion out)
+- **examples/cli** — `huri-cli`, the reference command-line client: a separate
+  package built on the client SDK (microphone and prompt in; text, speech and a
+  gesture view out)
 - **huri_core/modules**
   - `speech_to_text` — `microphone_vad` (VAD), `speech_to_text` (STT),
     `text_aggregator` (TAG)
@@ -376,8 +377,8 @@ async with client:
 
 Handlers of one topic run in arrival order; different topics run concurrently.
 A client YAML (`config/client_*.yaml`) holds the same three things — `modules`,
-`send` and `subscribe` — and the reference CLI (`python -m huri_core.client
---config ...`) adds its device settings under `cli:`.
+`send` and `subscribe` — and the reference CLI ([examples/cli](examples/cli),
+`huri-cli --config ...`) adds its device settings under `cli:`.
 
 ## Developper Documentation
 

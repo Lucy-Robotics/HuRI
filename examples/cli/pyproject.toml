@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=64,<82"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "huri-cli"
+version = "0.1.0"
+description = "Reference command-line client for HuRI, built on the client SDK"
+requires-python = ">=3.10"
+# Not huri-core[server]: a client never installs Ray. The curated event classes
+# still come from huri-core until they move to huri-events.
+dependencies = [
+  "huri-core[client]",
+  "numpy>=1.26,<2",
+  "scipy",
+  "sounddevice>=0.5,<0.6",
+  "prompt-toolkit>=3.0,<3.1",
+]
+
+[project.scripts]
+huri-cli = "huri_cli.main:main"
+
+[tool.setuptools.packages.find]
+include = ["huri_cli*"]

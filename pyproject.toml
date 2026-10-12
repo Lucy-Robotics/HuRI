@@ -30,14 +30,6 @@ client = [
   "websockets>=16,<17",
   "omegaconf>=2.3,<2.4",
 ]
-# The reference CLI client (huri_core.interfaces.cli_interface).
-cli = [
-  "huri-core[client]",
-  "numpy>=1.26,<2",
-  "scipy",
-  "sounddevice>=0.5,<0.6",
-  "prompt-toolkit>=3.0,<3.1",
-]
 # Dependencies of the curated modules still living in this repo (CPU set; the
 # GPU backends stay in requirements-{nvidia,amd}.txt). They move to each
 # module's own package when modules are split out.
@@ -130,4 +122,6 @@ exclude = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# The reference CLI is a separate package (examples/cli); its tests import it.
+pythonpath = ["examples/cli"]
 python_files = ["test_*.py"]

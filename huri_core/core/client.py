@@ -35,8 +35,11 @@ from typing import (
 )
 
 import websockets
+from omegaconf import OmegaConf
 
+from huri_core.core.dataclasses.config import ClientConfig
 from huri_core.core.events import EventData
+from huri_core.core.user_config import get_or_create_and_save_user_id
 
 logger = logging.getLogger("huri.client")
 
@@ -58,6 +61,23 @@ class _Subscription:
     event_cls: Type[EventData]
     handlers: List[Handler]
     queue: "asyncio.Queue[Any]"
+
+
+def load_raw_client_config(path: str) -> Dict[str, Any]:
+    """A client YAML, interpolations resolved, with this machine's user_id
+    (persisted under `user_id_file_path`, or the user config dir) added."""
+
+    with open(path) as f:
+        resolved = OmegaConf.to_container(OmegaConf.load(f), resolve=True)
+    if not isinstance(resolved, dict):
+        raise ValueError(f"{path}: a client config must be a YAML mapping")
+    raw: Dict[str, Any] = {str(k): v for k, v in resolved.items()}
+    raw["user_id"] = get_or_create_and_save_user_id(raw.get("user_id_file_path"))
+    return raw
+
+
+def load_client_config(path: str) -> ClientConfig:
+    return ClientConfig.from_dict(load_raw_client_config(path))
 
 
 def encode(topic: str, event: EventData) -> str | bytes:
@@ -106,6 +126,18 @@ class HuRIClient:
         self._subs: Dict[str, _Subscription] = {}
         self._ws: Optional[websockets.ClientConnection] = None
         self._tasks: List[asyncio.Task] = []
+
+    @classmethod
+    def from_config(cls, config: ClientConfig) -> "HuRIClient":
+        """A client for a session described by a client YAML (load_client_config).
+        Its `subscribe` topics still need handlers, registered with on()."""
+
+        return cls(
+            config.huri_url,
+            modules={k: m.to_dict() for k, m in config.modules.items()},
+            sends=config.send,
+            user_id=config.user_id,
+        )
 
     # --- configuration ----------------------------------------------------
 

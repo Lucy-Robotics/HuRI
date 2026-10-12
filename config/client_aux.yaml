@@ -4,8 +4,7 @@ huri_url: ws://localhost:8000/session
 send: [huri.audio.in, huri.question]
 subscribe: [huri.token, huri.audio.out, huri.motion]
 
-# Device settings of the CLI client (huri_core.interfaces.cli_interface);
-# the server never reads them.
+# Device settings of the reference CLI (examples/cli); the server never reads them.
 cli:
   audio_in:
     sample_rate: 16000

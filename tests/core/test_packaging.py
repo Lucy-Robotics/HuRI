@@ -22,7 +22,6 @@ CLIENT_IMPORTS = [
     "huri_core.core.session",
     "huri_core.core.client",
     "huri_core.core.dataclasses.config",
-    "huri_core.client",
 ]
 
 
@@ -48,8 +47,7 @@ def test_base_install_has_no_dependency():
 
 
 def test_client_extras_exclude_server_stack():
-    for extra in ("client", "cli"):
-        assert not names(resolve(extra)) & SERVER_ONLY, extra
+    assert not names(resolve("client")) & SERVER_ONLY
 
 
 def test_server_extra_owns_the_serve_pins():

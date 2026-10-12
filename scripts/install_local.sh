@@ -1412,6 +1412,8 @@ install_python_deps() {
   # which is how the server finds them.
   info "  huri-core (editable)"
   run "$PIP" install "${C[@]}" --no-deps -e "$REPO_ROOT"
+  # The reference CLI client (huri-cli); its deps are in requirements.txt.
+  run "$PIP" install "${C[@]}" --no-deps -e "$REPO_ROOT/examples/cli"
 
   # 3. (The ROCm CTranslate2 wheel is installed in step 1, alongside torch; the
   #    AMD requirements file is installed last, in step 5 — see the note there.)
@@ -2340,7 +2342,7 @@ if [ "\$huri_state" = "RUNNING" ]; then
   echo
   echo "HuRI is up. Talk to it with:"
   echo "    source .huri-local/env.sh"
-  echo "    python -m huri_core.client --config config/client_local.generated.yaml"
+  echo "    huri-cli --config config/client_local.generated.yaml"
   echo
   echo "Status: .huri-local/status.sh   Dashboard: http://127.0.0.1:8265"
 else
@@ -2761,7 +2763,7 @@ main() {
     Start:   .huri-local/start.sh
     Status:  .huri-local/status.sh
     Client:  source .huri-local/env.sh
-             python -m huri_core.client --config config/client_local.generated.yaml
+             huri-cli --config config/client_local.generated.yaml
     Stop:    .huri-local/stop.sh [--all]
 
     Plan:    .huri-local/plan.env          Log: .huri-local/install.log
