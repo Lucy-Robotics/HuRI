@@ -23,10 +23,17 @@ class Module:
     :output_type:
         Event topic produced by the module.
         Can be None for terminal modules.
+
+    :input_event: / :output_event:
+        Optional event classes the module expects on those topics. When set,
+        the server refuses to start if the installed event package registers
+        another class for the topic (a version mismatch).
     """
 
     input_type: str
     output_type: Optional[str]
+    input_event: Optional[Type[EventData]] = None
+    output_event: Optional[Type[EventData]] = None
 
     def process(
         self, _

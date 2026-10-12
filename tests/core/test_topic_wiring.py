@@ -12,14 +12,12 @@ import struct
 import numpy as np
 import pytest
 
-from huri_core.core.huri import HuRI as _HuRIDeployment
+from huri_core.core.compat import CompatibilityError, check_session
 from huri_core.core.module import Module
 from huri_core.core.plugins import installed_modules, load_modules
 from huri_core.core.session import Session
 from huri_core.modules.gesture.events import Motion
 from huri_core.modules.utils.sender import Sender
-
-HuRI = _HuRIDeployment.func_or_class
 
 
 class _Stub(Module):
@@ -73,14 +71,16 @@ def test_pipeline_topics_are_connected():
 
 def test_unknown_hook_topic_is_rejected():
     pipeline = [_Stub("huri.token", "huri.audio.out")]
-    with pytest.raises(ValueError, match="huri.audio.out"):
+    with pytest.raises(CompatibilityError, match="huri.audio.out"):
         # the pre-rename name: must not silently produce a dead Sender
-        HuRI._check_subscriptions(pipeline, ["audio"])
+        check_session(pipeline, sent=["huri.token"], subscribed=["audio"])
 
 
 def test_known_hook_topic_is_accepted():
-    HuRI._check_subscriptions(
-        [_Stub("huri.token", "huri.audio.out")], ["huri.audio.out"]
+    check_session(
+        [_Stub("huri.token", "huri.audio.out")],
+        sent=["huri.token"],
+        subscribed=["huri.audio.out"],
     )
 
 

@@ -816,6 +816,8 @@ class RAG(ModuleWithHandle, ModuleWithId):
     _handle_cls = RAGHandle
     input_type = "huri.question"
     output_type = "huri.token"
+    input_event = RAGQuestion
+    output_event = Token
 
     def __init__(
         self,

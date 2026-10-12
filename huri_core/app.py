@@ -3,6 +3,7 @@ import os
 
 from ray.serve import Application
 
+from huri_core.core.compat import check_modules
 from huri_core.core.huri import HuRI
 from huri_core.core.plugins import load_events, load_modules, parse_selection
 from huri_core.modules.factory import bind_deployment_handles
@@ -27,6 +28,8 @@ def build_app() -> Application:
             "session will be rejected. Set it, e.g. HURI_MODULES=vad,stt,tag,qag,rag"
         )
     events = load_events()
+    # Fail here, before anything is deployed, rather than in a replica.
+    check_modules(modules, events)
     handles = bind_deployment_handles(modules)
     app: Application = HuRI.bind(modules, handles, events)  # type: ignore[attr-defined]
     return app

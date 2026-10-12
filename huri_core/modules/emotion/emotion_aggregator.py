@@ -23,6 +23,8 @@ class EAG(Module):
 
     input_type = "huri.emotion"
     output_type = "huri.partial_question"
+    input_event = Emotion
+    output_event = PartialQuestion
 
     def __init__(self, ema_alpha: Optional[float] = None):
         super().__init__()

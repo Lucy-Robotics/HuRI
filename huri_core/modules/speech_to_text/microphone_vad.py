@@ -29,6 +29,8 @@ class VAD(Module):
     # with mic input — otherwise raw mic bytes get echoed back to the client.
     input_type = "huri.audio.in"
     output_type = "huri.voice"
+    input_event = BytesEvent
+    output_event = Voice
 
     def __init__(
         self,

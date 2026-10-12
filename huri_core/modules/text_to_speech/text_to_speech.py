@@ -257,6 +257,8 @@ class TTS(ModuleWithHandle):
     _handle_cls = _select_engine()
     input_type = "huri.token"
     output_type = "huri.audio.out"
+    input_event = Token
+    output_event = Audio
 
     def __init__(self, _handle: handle.DeploymentHandle):
         super().__init__(_handle)

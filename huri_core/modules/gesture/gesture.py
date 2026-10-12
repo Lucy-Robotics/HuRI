@@ -299,6 +299,8 @@ class MOV(ModuleWithHandle):
     _handle_cls = MOVHandle
     input_type = "huri.audio.out"
     output_type = "huri.motion"
+    input_event = Audio
+    output_event = Motion
 
     def __init__(
         self,

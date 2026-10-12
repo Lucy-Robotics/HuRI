@@ -78,6 +78,8 @@ class EMO(ModuleWithHandle):
     _handle_cls = EMOHandle
     input_type = "huri.voice"
     output_type = "huri.emotion"
+    input_event = Voice
+    output_event = Emotion
 
     def __init__(
         self,

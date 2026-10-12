@@ -21,6 +21,8 @@ class QAG(Module):
 
     input_type = "huri.partial_question"
     output_type = "huri.question"
+    input_event = PartialQuestion
+    output_event = RAGQuestion
 
     def __init__(self, use_emotion: bool = True):
         super().__init__()

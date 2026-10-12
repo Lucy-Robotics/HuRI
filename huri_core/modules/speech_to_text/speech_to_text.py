@@ -108,6 +108,8 @@ class STT(ModuleWithHandle):
     _handle_cls = STTHandle
     input_type = "huri.voice"
     output_type = "huri.transcript"
+    input_event = Voice
+    output_event = Transcript
 
     def __init__(
         self,

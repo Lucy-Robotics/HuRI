@@ -7,6 +7,7 @@ from fastapi import WebSocket, WebSocketDisconnect
 from ray import serve
 from ray.serve import handle
 
+from huri_core.core.compat import check_session
 from huri_core.core.plugins import installed_modules
 from huri_core.modules.factory import EventData, EventDataFactory, Module, ModuleFactory
 from huri_core.modules.utils.sender import Sender
@@ -49,18 +50,6 @@ class HuRI:
 
         self.clients: Dict[str, Session] = {}
 
-    @staticmethod
-    def _check_subscriptions(pipeline: List[Module], topics: List[str]) -> None:
-        produced = {m.output_type for m in pipeline if m.output_type is not None}
-        unknown = sorted({t for t in topics if t not in produced})
-        if unknown:
-            raise ValueError(
-                f"hook topic(s) {unknown} are not emitted by any module in this "
-                f"session's pipeline "
-                f"({sorted(type(m).__name__ for m in pipeline)}). "
-                f"Subscribable topics: {sorted(produced)}"
-            )
-
     @app.websocket("/session")
     async def run_session(self, ws: WebSocket):
         """
@@ -100,7 +89,11 @@ class HuRI:
             pipeline: List[Module] = self.module_factory.create_from_config(
                 client_config.user_id, client_config.modules
             )
-            self._check_subscriptions(pipeline, topic_list)
+            check_session(
+                pipeline,
+                sent=[sender.topic for sender in client_config.senders.values()],
+                subscribed=topic_list,
+            )
         except Exception as e:
             await ws.send_json(
                 {

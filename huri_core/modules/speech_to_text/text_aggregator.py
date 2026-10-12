@@ -26,6 +26,8 @@ class TAG(Module):
 
     input_type = "huri.transcript"
     output_type = "huri.partial_question"
+    input_event = Transcript
+    output_event = PartialQuestion
 
     def __init__(
         self,
