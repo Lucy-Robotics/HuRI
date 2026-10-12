@@ -77,11 +77,15 @@ class HuRI:
             [topic_length][topic][payload]
         """
         await ws.accept()
-        client_config_raw: Dict = await ws.receive_json()
-
+        client_config_raw: Dict = {}
         try:
-            # Inside the try: a malformed or old-format handshake gets a
-            # session_error back like any other rejection.
+            # Inside the try: a malformed (not JSON, not an object) or
+            # old-format handshake gets a session_error back like any other
+            # rejection, instead of a dropped connection.
+            received = await ws.receive_json()
+            if not isinstance(received, dict):
+                raise ValueError("the session handshake must be a JSON object")
+            client_config_raw = received
             client_config = ClientConfig.from_dict(client_config_raw)
             topic_list = client_config.subscribe
             pipeline: List[Module] = self.module_factory.create_from_config(
