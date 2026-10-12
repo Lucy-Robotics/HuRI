@@ -3,9 +3,14 @@ import os
 
 from ray.serve import Application
 
-from huri_core.core.compat import check_modules
+from huri_core.core.compat import check_manifests, check_modules
 from huri_core.core.huri import HuRI
-from huri_core.core.plugins import load_events, load_modules, parse_selection
+from huri_core.core.plugins import (
+    find_manifest,
+    load_events,
+    load_modules,
+    parse_selection,
+)
 from huri_core.modules.factory import bind_deployment_handles
 
 logger = logging.getLogger("ray.serve")
@@ -30,6 +35,12 @@ def build_app() -> Application:
     events = load_events()
     # Fail here, before anything is deployed, rather than in a replica.
     check_modules(modules, events)
+    manifests = {}
+    for name in modules:
+        manifest = find_manifest(name)
+        if manifest is not None:
+            manifests[name] = manifest
+    check_manifests(modules, manifests, events)
     handles = bind_deployment_handles(modules)
     app: Application = HuRI.bind(modules, handles, events)  # type: ignore[attr-defined]
     return app

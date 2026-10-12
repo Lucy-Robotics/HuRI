@@ -24,6 +24,9 @@ server = [
   "protobuf==4.25.8",
   "setuptools<82",
   "click<8.2",
+  # Version ranges of module manifests (huri_module.toml).
+  "packaging>=23",
+  "tomli>=2; python_version < '3.11'",
 ]
 # Client SDK: websocket transport and YAML config loading.
 client = [

@@ -12,9 +12,11 @@ Each reports all problems at once, in plain sentences, instead of letting the
 pipeline start and silently drop events.
 """
 
-from typing import Dict, Iterable, List, Optional, Type
+from importlib.metadata import PackageNotFoundError, version
+from typing import Callable, Dict, Iterable, List, Optional, Type
 
 from .events import EventData
+from .manifest import ModuleManifest
 from .module import Module
 from .plugins import CURATED_NAMESPACE, topic_namespace
 
@@ -100,5 +102,74 @@ def check_session(
             f"hook topic(s) {unknown} are not emitted by any module in this "
             f"session's pipeline ({names}). Subscribable topics: {sorted(produced)}"
         )
+    if problems:
+        raise CompatibilityError(problems)
+
+
+def _installed_version(dist: str) -> Optional[str]:
+    try:
+        return version(dist)
+    except PackageNotFoundError:
+        return None
+
+
+def check_manifests(
+    modules: Dict[str, Type[Module]],
+    manifests: Dict[str, ModuleManifest],
+    events: Dict[str, Type[EventData]],
+    installed_version: Callable[[str], Optional[str]] = _installed_version,
+) -> None:
+    """A module's manifest agrees with its class, and the installed huri-core
+    and event packages are in the ranges it was built against."""
+
+    from packaging.requirements import Requirement
+    from packaging.specifiers import SpecifierSet
+
+    problems: List[str] = []
+    for name, manifest in sorted(manifests.items()):
+        cls = modules.get(name)
+        if cls is None:
+            continue
+        where = f"module {name!r} ({manifest.source})"
+
+        ports = (
+            ("input", manifest.input, cls.input_type, cls.input_event),
+            ("output", manifest.output, cls.output_type, cls.output_event),
+        )
+        for role, port, topic, declared in ports:
+            if port is None:
+                if topic is not None:
+                    problems.append(
+                        f"{where}: the manifest has no {role}, the module "
+                        f"produces {topic!r}"
+                    )
+                continue
+            if port.topic != topic:
+                problems.append(
+                    f"{where}: the manifest's {role} topic is {port.topic!r}, the "
+                    f"module's is {topic!r}"
+                )
+            actual = declared or events.get(port.topic)
+            if actual is not None and _qualname(actual) != port.event:
+                problems.append(
+                    f"{where}: the manifest's {role} event is {port.event}, but "
+                    f"{_qualname(actual)} is what carries {port.topic!r}"
+                )
+
+        core = installed_version("huri-core")
+        if core is not None and not SpecifierSet(manifest.huri_core).contains(
+            core, prereleases=True
+        ):
+            problems.append(
+                f"{where} supports huri-core {manifest.huri_core}, but {core} is "
+                "installed"
+            )
+        for raw in manifest.events:
+            requirement = Requirement(raw)
+            got = installed_version(requirement.name)
+            if got is None:
+                problems.append(f"{where} needs {raw}, which is not installed")
+            elif not requirement.specifier.contains(got, prereleases=True):
+                problems.append(f"{where} needs {raw}, but {got} is installed")
     if problems:
         raise CompatibilityError(problems)

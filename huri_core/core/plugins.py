@@ -19,11 +19,14 @@ a curated one without colliding with it.
 """
 
 import importlib
+import importlib.util
 import re
 from importlib.metadata import EntryPoint, entry_points
-from typing import Any, Dict, Iterable, List, Optional, Type
+from pathlib import Path
+from typing import Any, Dict, Iterable, Iterator, List, Optional, Type
 
 from .events import EventData
+from .manifest import MANIFEST_FILE, ModuleManifest, loads_manifest
 from .module import Module
 
 MODULES_GROUP = "huri.modules"
@@ -216,3 +219,59 @@ def load_events() -> Dict[str, Type[EventData]]:
             )
         events[topic] = obj
     return events
+
+
+# --- manifests (huri_module.toml) ----------------------------------------------
+
+
+def _package_dirs(module_path: str) -> Iterator[Path]:
+    """Directories of a module's top-level package, found without importing it."""
+
+    top = module_path.split(".", 1)[0]
+    try:
+        spec = importlib.util.find_spec(top)
+    except (ImportError, ValueError):
+        return
+    if spec is None:
+        return
+    for location in spec.submodule_search_locations or []:
+        yield Path(location)
+    if spec.origin and not spec.submodule_search_locations:
+        yield Path(spec.origin).parent
+
+
+def _manifest_files(ep: Optional[EntryPoint], module_path: str) -> Iterator[Path]:
+    seen = set()
+    dist = getattr(ep, "dist", None) if ep is not None else None
+    files = (dist.files or []) if dist is not None else []
+    for file in files:
+        if dist is not None and file.name == MANIFEST_FILE:
+            path = Path(str(dist.locate_file(file)))
+            if path.is_file() and path not in seen:
+                seen.add(path)
+                yield path
+    # Editable installs and import paths: the files are next to the code.
+    for directory in _package_dirs(module_path):
+        for path in sorted(directory.rglob(MANIFEST_FILE)):
+            if path not in seen:
+                seen.add(path)
+                yield path
+
+
+def find_manifest(name: str) -> Optional[ModuleManifest]:
+    """The manifest of an installed module (by name) or of an import path,
+    without importing the module. None when the module ships none."""
+
+    if is_import_path(name):
+        ep, module_path = None, name.split(":", 1)[0]
+        wanted = name.split(":", 1)[1].lower()
+    else:
+        ep = _entry_points(MODULES_GROUP).get(name)
+        if ep is None:
+            return None
+        module_path, wanted = ep.value.split(":", 1)[0], name
+    for path in _manifest_files(ep, module_path):
+        manifest = loads_manifest(path.read_text(), str(path))
+        if manifest.name == wanted:
+            return manifest
+    return None

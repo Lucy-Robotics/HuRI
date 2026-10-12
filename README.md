@@ -375,6 +375,28 @@ list it in `HURI_MODULES` (`HURI_MODULES=stt,my_pkg.servo:Servo`) and reference
 it from the client config with `module: my_pkg.servo:Servo` instead of `name:`.
 A client can never make the server import a path the server did not list.
 
+### Module manifest (`huri_module.toml`)
+
+A module package ships one `huri_module.toml` per module, next to its code, so
+tooling can reason about the module without importing it:
+
+```toml
+name = "servo"                     # its huri.modules entry point name
+summary = "Gesture to servo angle arrays"
+input = { topic = "huri.motion", event = "huri_events.motion:Motion" }
+output = { topic = "acme.servo_angles", event = "huri_events_servo:ServoAngles" }  # omit for a terminal module
+events = ["huri-events>=0.1,<0.2", "huri-events-servo>=0.1,<0.2"]                  # optional
+requires = { gpu = false, actuation = false }                                      # optional
+huri_core = ">=0.4,<0.5"
+```
+
+At startup the server checks every enabled module that has one: its topics and
+event classes must match the module class, and the installed `huri-core` and
+event packages must be in the declared ranges — otherwise it refuses to start
+and says which. (`huri_core/core/manifest.py` is the reference parser; an
+unpackaged module's manifest sits next to its code and is named after its class,
+lowercased.)
+
 ## Client SDK
 
 `huri_core.core.client.HuRIClient` (`pip install "huri-core[client]"`) is all a
