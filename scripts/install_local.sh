@@ -1343,6 +1343,24 @@ install_python_deps() {
   # upgrade used to run before C was defined and without it, pulling the newest
   # setuptools and relying on a later resolution to walk it back.
   local C=(-c "$REPO_ROOT/constraints.txt")
+
+  # What each planned module declares for this host's hardware
+  # (packages/*/pyproject.toml + requirements-<variant>.txt; the variant is the
+  # host's since the torch build is shared). Merged, and checked for modules
+  # pinning one package to different versions, before anything heavy is
+  # installed; the merged file itself is installed last (step 7).
+  local variant=cpu
+  [[ "$GPU_VENDOR" == "nvidia" || "$GPU_VENDOR" == "amd" ]] && variant="$GPU_VENDOR"
+  local modules_req="$STATE_DIR/requirements-modules.generated.txt" merged
+  if ! merged="$("$PY_BIN" "$REPO_ROOT/scripts/module_requirements.py" \
+                  --variant "$variant" --modules "$(served_modules)" 2>&1)"; then
+    err "the planned modules cannot be installed together on this $variant host:"
+    local line
+    while IFS= read -r line; do note "$line"; done <<<"$merged"
+    die "fix the pins in packages/*/requirements-$variant.txt, or leave a module out with --modules"
+  fi
+  (( DRY_RUN )) || printf '%s\n' "$merged" | write_file "$modules_req"
+
   run "$PIP" install "${C[@]}" --upgrade pip setuptools wheel
 
   # ABI tag of the interpreter that will actually receive the wheels. The ROCm
@@ -1475,6 +1493,15 @@ install_python_deps() {
       install_cosyvoice
     fi
   fi
+
+  # 7. The planned modules' own requirements for this hardware (merged above).
+  #    Mostly satisfied by the steps before; what it adds is that the module
+  #    packages are the reference for their dependencies.
+  info "  module requirements ($variant: $(served_modules))"
+  local idx=()
+  [[ "$variant" == "nvidia" ]] \
+    && idx=(--extra-index-url "$TORCH_CUDA_INDEX" --extra-index-url https://pypi.ngc.nvidia.com)
+  run "$PIP" install "${C[@]}" ${idx[@]+"${idx[@]}"} -r "$modules_req"
 
   ok "python environment ready"
 }

@@ -1,0 +1,3 @@
+# Hardware pins of huri-module-emo on CPU. torch comes from the CPU index the installer uses first.
+# Installed by scripts/install_local.sh through scripts/module_requirements.py.
+transformers==4.51.3

@@ -1,0 +1,13 @@
+# Hardware pins of huri-module-mov on CPU. torch comes from the CPU index the installer uses first.
+# Installed by scripts/install_local.sh through scripts/module_requirements.py.
+transformers==4.51.3
+# EMAGE (huri_mov/emage) and its rendering/runtime extras.
+huggingface_hub==0.36.2
+smplx==0.1.28
+pyrender==0.1.45
+trimesh==4.12.2
+imageio==2.33.0
+librosa==0.10.2
+soundfile==0.12.1
+omegaconf==2.3.0
+matplotlib==3.7.5  # EMAGE init imports it

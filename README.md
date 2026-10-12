@@ -181,6 +181,16 @@ scripts/install_local.sh --only verify          # re-check this machine
 scripts/install_local.sh --only python,models   # reinstall deps and weights
 ```
 
+### Module dependencies per hardware
+
+Each module package declares its own dependencies (`pyproject.toml`) and, where
+the hardware matters, exact pins per variant (`requirements-{cpu,nvidia,amd}.txt`).
+The installer merges them for the modules it planned and the host's variant —
+`scripts/module_requirements.py --variant nvidia --modules stt,rag,...` — and
+**stops before installing anything heavy** if two modules pin the same package
+to different versions, naming both. The merged file
+(`.huri-local/requirements-modules.generated.txt`) is installed last.
+
 ### Feeding the RAG memory
 
 Conversation memory works out of the box (`RAGHandle` creates its collection on

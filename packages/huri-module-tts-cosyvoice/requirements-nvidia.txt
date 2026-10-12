@@ -29,3 +29,8 @@ regex==2025.11.3
 tqdm==4.67.3
 rich==13.7.1                # cosyvoice/flow/flow_matching.py -> matcha.utils.rich_utils
 
+# Imported at inference by Matcha-TTS / HyperPyYAML (see install_local.sh).
+lightning==2.2.4
+gdown==5.1.0
+wget==3.2
+pyworld==0.3.4
