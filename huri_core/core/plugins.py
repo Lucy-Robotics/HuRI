@@ -88,31 +88,38 @@ def parse_selection(selection: Optional[str]) -> List[str]:
     return [name.strip() for name in selection.split(",") if name.strip()]
 
 
+def installed_modules() -> List[str]:
+    """Names of every installed module, without importing any of them."""
+
+    return sorted(_entry_points(MODULES_GROUP))
+
+
 def load_modules(selection: Optional[Iterable[str]] = None) -> Dict[str, Type[Module]]:
     """Load the modules this server registers.
 
     :selection: module names and/or import paths to load (the HURI_MODULES
-        allow-list). None or empty loads every installed module. Only the
-        selected entry points are imported, so a host never imports a module
-        it does not run (and its heavy dependencies).
+        allow-list). Default-deny: None or empty loads no module at all, since
+        any installed package can register one and the operator must opt each
+        in. Only the selected entry points are imported, so a host never
+        imports a module it does not run (and its heavy dependencies).
     """
 
-    available = _entry_points(MODULES_GROUP)
     wanted = list(selection or [])
     if not wanted:
-        if not available:
-            raise PluginError(
-                f"no module is registered under the {MODULES_GROUP!r} entry point "
-                "group. Install huri-core (`pip install -e .` from a checkout) or "
-                "a module package."
-            )
-        wanted = sorted(available)
+        return {}
 
+    available = _entry_points(MODULES_GROUP)
     unknown = [n for n in wanted if not is_import_path(n) and n not in available]
     if unknown:
-        raise ValueError(
-            f"HURI_MODULES lists unknown module(s): {sorted(unknown)}. "
+        hint = (
             f"Installed modules: {sorted(available)}"
+            if available
+            else f"No module is installed under the {MODULES_GROUP!r} entry point "
+            "group: install huri-core (`pip install -e .` from a checkout) or a "
+            "module package."
+        )
+        raise ValueError(
+            f"HURI_MODULES lists unknown module(s): {sorted(unknown)}. {hint}"
         )
 
     modules: Dict[str, Type[Module]] = {}

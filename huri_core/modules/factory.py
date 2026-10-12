@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Mapping, Type
+from typing import Any, Dict, Iterable, List, Mapping, Type
 
 from ray.serve import handle
 
@@ -40,9 +40,12 @@ class EventDataFactory:
 
 
 class ModuleFactory:
-    def __init__(self, handles):
+    def __init__(self, handles, installed: Iterable[str] = ()):
+        """:installed: every installed module name, enabled or not, only used to
+        tell "not enabled here" apart from "does not exist" in errors."""
         self._registry: Dict[str, Type[Module]] = {}
         self._handles = handles
+        self._installed = set(installed)
 
     def register(self, name: str, module_cls: Type[Module]) -> None:
         if not issubclass(module_cls, Module):
@@ -66,6 +69,12 @@ class ModuleFactory:
     ) -> Module:
 
         if name not in self._registry:
+            if name in self._installed:
+                raise ValueError(
+                    f"Module '{name}' is installed but not enabled on this server: "
+                    f"its operator must add it to HURI_MODULES. Enabled modules: "
+                    f"{self.registered()}"
+                )
             raise ValueError(
                 f"Unknown module '{name}'. This server registers "
                 f"{self.registered()} (an import path must be listed in its "

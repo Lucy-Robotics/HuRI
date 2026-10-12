@@ -40,6 +40,9 @@ applications:
     import_path: huri_core.app:app
     runtime_env:
       env_vars:
+        # Modules this server enables (default-deny: unset enables none).
+        # Keep in step with the *Handle deployments below.
+        HURI_MODULES: "vad,stt,tag,emo,eag,qag,rag,tts,mov"
         OLLAMA_BASE_URL: "http://localhost:11434"
         OLLAMA_API_KEY: "ollama"
 

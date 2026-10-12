@@ -14,7 +14,7 @@ import pytest
 
 from huri_core.core.huri import HuRI as _HuRIDeployment
 from huri_core.core.module import Module
-from huri_core.core.plugins import load_modules
+from huri_core.core.plugins import installed_modules, load_modules
 from huri_core.core.session import Session
 from huri_core.modules.gesture.events import Motion
 from huri_core.modules.utils.sender import Sender
@@ -57,7 +57,7 @@ def _motion(frames=3):
 
 def test_pipeline_topics_are_connected():
     """Every module's input must be some other module's output (or an entrypoint)."""
-    modules = load_modules()
+    modules = load_modules(installed_modules())
     produced = {m.output_type for m in modules.values() if m.output_type}
     entrypoints = {"audio.in", "question"}  # fed by the client, not by a module
     dangling = {

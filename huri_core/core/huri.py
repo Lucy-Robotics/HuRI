@@ -7,6 +7,7 @@ from fastapi import WebSocket, WebSocketDisconnect
 from ray import serve
 from ray.serve import handle
 
+from huri_core.core.plugins import installed_modules
 from huri_core.modules.factory import EventData, EventDataFactory, Module, ModuleFactory
 from huri_core.modules.utils.sender import Sender
 
@@ -34,7 +35,7 @@ class HuRI:
         handles: Dict[str, handle.DeploymentHandle],
         events: Dict[str, Type[EventData]],
     ) -> None:
-        self.module_factory = ModuleFactory(handles)
+        self.module_factory = ModuleFactory(handles, installed=installed_modules())
         self.event_factory = EventDataFactory()
         for name, module_cls in modules.items():
             self.module_factory.register(name, module_cls)

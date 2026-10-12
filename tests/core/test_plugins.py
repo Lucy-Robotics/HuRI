@@ -1,5 +1,6 @@
 """Entry-point discovery of modules and events (huri_core.core.plugins)."""
 
+import os
 from types import SimpleNamespace
 
 import pytest
@@ -51,7 +52,8 @@ def installed(monkeypatch):
 
 def test_module_is_found_through_its_entry_point(installed):
     installed[plugins.MODULES_GROUP].append(FakeEntryPoint("toy", ToyModule))
-    assert plugins.load_modules() == {"toy": ToyModule}
+    assert plugins.load_modules(["toy"]) == {"toy": ToyModule}
+    assert plugins.installed_modules() == ["toy"]
 
 
 def test_only_selected_modules_are_imported(installed):
@@ -75,14 +77,14 @@ def test_unknown_module_is_rejected(installed):
 
 
 def test_no_installed_module_explains_how_to_install(installed):
-    with pytest.raises(plugins.PluginError, match="pip install"):
-        plugins.load_modules()
+    with pytest.raises(ValueError, match="pip install"):
+        plugins.load_modules(["stt"])
 
 
 def test_non_module_entry_point_is_rejected(installed):
     installed[plugins.MODULES_GROUP].append(FakeEntryPoint("toy", object))
     with pytest.raises(plugins.PluginError, match="Module subclass"):
-        plugins.load_modules()
+        plugins.load_modules(["toy"])
 
 
 def test_same_module_name_from_two_distributions_is_an_error(installed):
@@ -91,7 +93,7 @@ def test_same_module_name_from_two_distributions_is_an_error(installed):
         FakeEntryPoint("toy", ToyModule, dist="pkg-b"),
     ]
     with pytest.raises(plugins.PluginError, match="pkg-a.*pkg-b"):
-        plugins.load_modules()
+        plugins.load_modules(["toy"])
 
 
 def test_events_are_found_by_topic(installed):
@@ -174,3 +176,35 @@ def test_curated_modules_and_events_are_registered_by_huri_core():
     for module in modules.values():
         assert module.input_type in events
         assert module.output_type is None or module.output_type in events
+
+
+# --- default-deny (HURI_MODULES unset) ----------------------------------------
+
+
+@pytest.mark.parametrize("selection", [None, [], plugins.parse_selection(" , ")])
+def test_unset_allow_list_enables_and_imports_nothing(installed, selection):
+    installed[plugins.MODULES_GROUP].append(
+        FakeEntryPoint("toy", ImportError("must not be imported"))
+    )
+    assert plugins.load_modules(selection) == {}
+
+
+def test_server_without_allow_list_rejects_every_session(monkeypatch):
+    """With HURI_MODULES unset, a session asking for an installed module is
+    refused, and told why. Builds the registry the way HuRI.__init__ does."""
+    monkeypatch.delenv("HURI_MODULES", raising=False)
+    enabled = plugins.load_modules(plugins.parse_selection(os.getenv("HURI_MODULES")))
+    factory = ModuleFactory(handles={}, installed=plugins.installed_modules())
+    for name, cls in enabled.items():
+        factory.register(name, cls)
+
+    assert factory.registered() == []
+    config = ModuleConfig.from_dict({"name": "tag"})
+    with pytest.raises(ValueError, match="installed but not enabled.*HURI_MODULES"):
+        factory.create_from_config("user", {"tag": config})
+
+
+def test_unknown_module_is_not_reported_as_disabled():
+    factory = ModuleFactory(handles={}, installed=["tag"])
+    with pytest.raises(ValueError, match="Unknown module 'nope'"):
+        factory.create("user", "nope")

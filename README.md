@@ -212,6 +212,7 @@ then restart (`.huri-local/stop.sh && .huri-local/start.sh`).
 | `Task was killed due to the node running low on memory`        | The plan did fit but Ollama's KV cache grew. Use a smaller tier: `--llm-model mistral:7b`, and `ollama stop <big-model>`.                                            |
 | `torch sees the GPU but cannot launch a kernel on it`          | The torch build has no code objects for your GPU. `--only config` sets `HSA_OVERRIDE_GFX_VERSION` when a compatible same-family arch exists; otherwise run CPU-only. |
 | Client exits with `session_error: Unknown module 'x'`          | The client config lists a module the server did not register. Match it to `HURI_MODULES`, or regenerate both with `--only config`.                                   |
+| Client exits with `session_error: Module 'x' is installed but not enabled` | The server's `HURI_MODULES` does not list it (unset enables nothing). Add it there, or drop it from the client config. |
 | `qdrant is not answering … HuRI does not manage this instance` | Something else already owned the port when you installed, so HuRI never created its own. Start it yourself, or free the port and re-run `--only services`.           |
 | No audio from the client                                       | Check TTS is actually enabled (`grep HURI_MODULES config/huri_local.generated.yaml`) — with `--modules` or a dropped plan there may be no TTS at all.                |
 | Install fails with no explanation                              | Every command's output is in `.huri-local/install.log`, and the error line names the real command.                                                                   |
@@ -328,8 +329,11 @@ servo = "huri_servo.module:Servo"          # usable as `name: servo`
 "servo_angles" = "huri_servo.events:ServoAngles"
 ```
 
-`HURI_MODULES` is the server's allow-list; unset, every installed module is
-registered. A module that is not packaged at all can be tried by import path:
+`HURI_MODULES` is the server's allow-list, and it is **default-deny**: unset or
+empty, the server enables no module and rejects every session, because any
+installed package can register one. List each module explicitly
+(`HURI_MODULES=vad,stt,tag,qag,rag`); the installer and the shipped serve
+configs do. A module that is not packaged at all can be tried by import path:
 list it in `HURI_MODULES` (`HURI_MODULES=stt,my_pkg.servo:Servo`) and reference
 it from the client config with `module: my_pkg.servo:Servo` instead of `name:`.
 A client can never make the server import a path the server did not list.

@@ -58,6 +58,9 @@ ray:
         import_path: huri_core.app:app
         runtime_env:
           env_vars:
+            # Modules this server enables (default-deny: unset enables none).
+            # Keep in step with the *Handle deployments below.
+            HURI_MODULES: "vad,stt,tag,emo,eag,qag,rag,tts,mov"
             RAY_COLOR_PREFIX: "1"
             HURI_GESTURE_CONTEXT_SEC: "2.0"
             HURI_GESTURE_MIN_CHUNK_SEC: "0.5"

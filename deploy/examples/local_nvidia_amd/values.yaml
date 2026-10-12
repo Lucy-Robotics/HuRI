@@ -30,6 +30,9 @@ ray:
         import_path: huri_core.app:app
         runtime_env:
           env_vars:
+            # Modules this server enables (default-deny: unset enables none).
+            # Keep in step with the *Handle deployments below.
+            HURI_MODULES: "vad,stt,tag,emo,eag,qag,rag,tts,mov"
             RAY_COLOR_PREFIX: "1"
             # Gesture sliding-window defaults. The Gesture *module* runs in the
             # HuRI (CPU) actor, so these live app-wide here rather than on the
