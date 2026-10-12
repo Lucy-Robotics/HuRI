@@ -9,9 +9,59 @@ description = "HuRI: realtime, modular conversational pipeline for robots"
 readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.10"
-# Runtime dependencies are still installed from requirements*.txt; they move
-# into this table, split into [server] / [client] extras, in #73.
+# The base install is the abstract framework only (Module, EventData, bus):
+# no third-party dependency. Heavy parts sit behind extras so a client never
+# installs Ray or FastAPI. requirements*.txt keep the exact pins the images and
+# install_local.sh use; tests/core/test_packaging.py keeps both in step.
 dependencies = []
+
+[project.optional-dependencies]
+# Ray Serve app builder + FastAPI ingress, and the pins that constrain that
+# process whatever modules are loaded (see constraints.txt for the why of each).
+server = [
+  "ray[serve]>=2.55.1,<2.56",
+  "fastapi<0.139.2",
+  "protobuf==4.25.8",
+  "setuptools<82",
+  "click<8.2",
+]
+# Client SDK: websocket transport and YAML config loading.
+client = [
+  "websockets>=16,<17",
+  "omegaconf>=2.3,<2.4",
+]
+# The reference CLI client (huri_core.interfaces.cli_interface).
+cli = [
+  "huri-core[client]",
+  "numpy>=1.26,<2",
+  "scipy",
+  "sounddevice>=0.5,<0.6",
+  "prompt-toolkit>=3.0,<3.1",
+]
+# Dependencies of the curated modules still living in this repo (CPU set; the
+# GPU backends stay in requirements-{nvidia,amd}.txt). They move to each
+# module's own package when modules are split out.
+modules = [
+  "huri-core[server]",
+  "numpy>=1.26,<2",
+  "webrtcvad==2.0.10",
+  "faster-whisper>=1.2.1,<1.3",
+  "piper-tts>=1.8,<1.9",
+  "qdrant-client>=1.18,<1.19",
+  "sentence-transformers>=3.2.1,<3.3",
+  "pypdf>=5.1,<5.2",
+  "semantic_chunker==0.2.0",
+  "httpx>=0.27.2,<0.28",
+]
+dev = [
+  "black==26.3.1",
+  "flake8==7.3.0",
+  "flake8-toml-config==1.0.0",
+  "isort==8.0.1",
+  "mypy==1.20.2",
+  "pytest==9.0.3",
+  "pytest-asyncio==1.4.0",
+]
 
 [project.urls]
 Repository = "https://github.com/Lucy-Robotics/HuRI"

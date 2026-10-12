@@ -1,8 +1,10 @@
-from typing import Any, AsyncGenerator, Coroutine, Optional, Type
-
-from ray.serve import handle
+from typing import TYPE_CHECKING, Any, AsyncGenerator, Coroutine, Optional, Type
 
 from .events import EventData
+
+if TYPE_CHECKING:
+    # Only for annotations: the base classes must import without huri-core[server].
+    from ray.serve import handle
 
 
 class Module:
@@ -48,7 +50,7 @@ class ModuleWithHandle(Module):
 
     _handle_cls: Type[Any]
 
-    def __init__(self, _handle: handle.DeploymentHandle, **kwargs):
+    def __init__(self, _handle: "handle.DeploymentHandle", **kwargs):
         super().__init__(**kwargs)
         self._handle = _handle
 
