@@ -242,6 +242,8 @@ jobs:
           pip install --no-deps -e . -e examples/cli
           for pkg in packages/*/; do pip install --no-deps -e "$pkg"; done
       - run: pytest -q
+      - name: the curated-module registry matches its packages
+        run: python huri-modules/check_registry.py
       - name: the shipped client configs load through the real loader
         # Stricter than the `configs` job: this exercises ClientConfig.from_dict
         # and the sender/hook/module dataclasses, not just YAML syntax.

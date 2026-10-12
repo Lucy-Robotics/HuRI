@@ -360,6 +360,11 @@ See `tests/speech_to_text/test_stt_tag.py` and `tests/core/test_testing.py`.
 - **packages/huri-events** — `huri-events`, the curated event classes (one per
   `huri.*` topic, with its wire format): a separate, light distribution
   (huri-core + numpy) that clients install to decode the topics
+- **huri-modules** — the curated-module registry (`registry.toml`, the
+  "verified" index), its CI check, the listing criteria (`ACCEPTANCE.md`) and
+  `install.sh`; laid out to become the `huri-modules` repository
+- **tests/integration** — the whole curated pipeline in one session, real
+  modules on the real bus with faked model deployments
 - **examples/cli** — `huri-cli`, the reference command-line client: a separate
   package built on the client SDK (microphone and prompt in; text, speech and a
   gesture view out)
