@@ -266,6 +266,21 @@ pip install -c constraints.txt -r requirements-amd.txt
 
 Note that `requirements.txt` also contains the lint/test toolchain.
 
+### Installing as a package
+
+`huri-core` is also pip-installable, with its heavy parts behind extras so a
+client never installs Ray or FastAPI:
+
+```sh
+pip install "huri-core[client] @ git+https://github.com/Lucy-Robotics/HuRI.git"   # client SDK only
+pip install "huri-core[cli] @ git+https://github.com/Lucy-Robotics/HuRI.git"      # + the CLI client
+pip install -c constraints.txt -e ".[modules,dev]"                                 # server + curated modules
+```
+
+`[server]` is Ray Serve + FastAPI and the pins that keep them working;
+`[modules]` adds the CPU dependencies of the modules in this repo. The GPU
+backends still come from `requirements-{nvidia,amd}.txt`.
+
 ## Testing a change
 
 ```sh
