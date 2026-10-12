@@ -3,17 +3,17 @@ import asyncio
 import numpy as np
 
 from huri_core.modules.speech_to_text.events import Voice
+from huri_core.testing import LocalHandle, ModuleHarness
 
 
 class FakeHandle:
-    """Returns a fixed emotion per call; can block the first call."""
+    """Stands in for EMOHandle: a fixed emotion per call; can block the first."""
 
     def __init__(self, gate=None):
         self.gate = gate
         self.calls = []
-        self.predict = self
 
-    async def remote(self, audio):
+    async def predict(self, audio):
         self.calls.append(len(audio))
         if self.gate is not None and len(self.calls) == 1:
             await self.gate.wait()
@@ -24,11 +24,11 @@ def _emo(handle):
     from huri_core.modules.emotion.prosody_analysis import EMO
 
     # 20 ms blocks -> window of 10 frames (fast tests).
-    return EMO(_handle=handle, analysis_window=0.2)
+    return ModuleHarness(EMO, handle=LocalHandle(handle), analysis_window=0.2)
 
 
 async def _collect(emo, voice):
-    return [e async for e in emo.process(voice)]
+    return await emo.feed(voice)
 
 
 def _voice():

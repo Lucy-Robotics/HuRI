@@ -293,6 +293,29 @@ make check       # both
 scripts/test_install.sh            # run the installer in clean Ubuntu containers
 ```
 
+### Testing a module alone
+
+`huri_core.testing` runs one module in-process — no Ray, no server, only the
+base `huri-core` install. `ModuleHarness` builds the module like the server
+does, checks the events in and out against its `input_event` / `output_event`,
+and returns what it emitted; `LocalHandle` stands in for the Serve deployment
+of a `ModuleWithHandle`:
+
+```python
+from huri_core.testing import LocalHandle, ModuleHarness
+
+
+class FakeWhisper:  # the deployment's methods the module calls
+    async def transcribe(self, audio, language):
+        return "hello"
+
+
+stt = ModuleHarness(STT, handle=LocalHandle(FakeWhisper()), language="en")
+assert stt.run(Voice(frames), Voice(None))[-1] == Transcript("hello", True)
+```
+
+See `tests/speech_to_text/test_stt_tag.py` and `tests/core/test_testing.py`.
+
 ## Folder/Module structure
 
 - **root** — server entrypoints: `huri_core/app.py`, `huri_core/launch_huri.py`
