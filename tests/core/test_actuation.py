@@ -88,3 +88,31 @@ def test_server_refuses_an_enabled_but_not_opted_in_actuation_module():
 
     allowed = build_app(HURI_MODULES=f"tag,{servo}", HURI_ACTUATION_MODULES=servo)
     assert allowed.returncode == 0, allowed.stderr
+
+
+def test_import_path_cannot_skip_a_packaged_modules_actuation_declaration(
+    tmp_path, monkeypatch
+):
+    """Enabling a packaged module by import path instead of by name still
+    finds its manifest, so its requires.actuation still needs the opt-in."""
+    from types import SimpleNamespace
+
+    from huri_core.core import plugins
+
+    (tmp_path / "huri_module.toml").write_text(
+        'name = "arm"\nsummary = "Moves an arm"\n'
+        'input = { topic = "huri.motion", event = "huri_events.motion:Motion" }\n'
+        'requires = { actuation = true }\nhuri_core = ">=0.4.0.dev0,<0.5"\n'
+    )
+    dist = SimpleNamespace(
+        name="acme-arm",
+        files=[Path("huri_module.toml")],
+        locate_file=lambda f: tmp_path / f,
+    )
+    path = f"{__name__}:Arm"
+    ep = SimpleNamespace(name="arm", value=path, dist=dist)
+    monkeypatch.setattr(plugins, "entry_points", lambda group: [ep])
+
+    manifests = {path: plugins.find_manifest(path)}  # what build_app collects
+    with pytest.raises(CompatibilityError, match="HURI_ACTUATION_MODULES"):
+        check_actuation({path: Arm}, manifests, opted_in=[])
