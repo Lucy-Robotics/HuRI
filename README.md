@@ -21,7 +21,7 @@ Then, in a second terminal:
 
 ```sh
 source .huri-local/env.sh
-python -m src.client --config config/client_local.generated.yaml
+python -m huri_core.client --config config/client_local.generated.yaml
 ```
 
 You get a `>>` prompt; typing or speaking both work. `\exit` quits the client
@@ -108,7 +108,7 @@ scripts/install_local.sh --force-tts --force-gesture --force-emo
 ```
 
 `--modules` sets `HURI_MODULES`, which is what decides the module registry
-(`src/modules/modules.py`) and therefore which Serve deployments exist. The
+(`huri_core/modules/modules.py`) and therefore which Serve deployments exist. The
 **client** config must list the same module names — a client asking for a module
 the server did not register is rejected with a `session_error` naming both sets.
 
@@ -137,7 +137,7 @@ It generates:
 ```sh
 .huri-local/start.sh                 # services + ray head + serve deploy
 source .huri-local/env.sh
-python -m src.client --config config/client_local.generated.yaml
+python -m huri_core.client --config config/client_local.generated.yaml
 .huri-local/status.sh                # what is up, locally and remotely
 .huri-local/stop.sh --all
 ```
@@ -149,7 +149,7 @@ route (which is green even when every deployment is dead).
 
 `source .huri-local/env.sh` gives a shell configured exactly like a Serve
 replica (model paths, `HURI_MODULES`, STT device, API key), so
-`python -m src.launch_huri` and `python -m src.modules.rag.ingestion` work
+`python -m huri_core.launch_huri` and `python -m huri_core.modules.rag.ingestion` work
 without `serve deploy`.
 
 Re-run a single stage with `--only`:
@@ -168,8 +168,8 @@ must match the one the server queries with**, or the vectors will not line up:
 
 ```sh
 source .huri-local/env.sh
-python -m src.modules.rag.ingestion --help
-python -m src.modules.rag.ingestion \
+python -m huri_core.modules.rag.ingestion --help
+python -m huri_core.modules.rag.ingestion \
   --embedding-model "$HURI_EMBED_MODEL" --embedding-url "$HURI_EMBED_URL" ...
 ```
 
@@ -234,13 +234,13 @@ the RAG settings then come from `RAGDeploymentConfig`'s env fallbacks, not from
 a Serve `user_config`):
 
 ```sh
-python -m src.launch_huri
+python -m huri_core.launch_huri
 ```
 
 Client:
 
 ```sh
-python -m src.client --config config/client_local.generated.yaml
+python -m huri_core.client --config config/client_local.generated.yaml
 ```
 
 Client config template: [config/client_template.yaml](config/client_template.yaml).
@@ -277,14 +277,14 @@ scripts/test_install.sh            # run the installer in clean Ubuntu container
 
 ## Folder/Module structure
 
-- **root** — entrypoints: `src/app.py`, `src/launch_huri.py` (server),
-  `src/client.py` (client)
-- **src/core** — `huri` (ingress + per-session router), `bus` (event graph),
+- **root** — entrypoints: `huri_core/app.py`, `huri_core/launch_huri.py` (server),
+  `huri_core/client.py` (client)
+- **huri_core/core** — `huri` (ingress + per-session router), `bus` (event graph),
   `client` / `interface`, `module`, `session`, `events`, `user_config`,
   `dataclasses/config`
-- **src/interfaces** — `cli_interface`: the reference client senders (audio,
+- **huri_core/interfaces** — `cli_interface`: the reference client senders (audio,
   text) and hooks (token, audio, motion)
-- **src/modules**
+- **huri_core/modules**
   - `speech_to_text` — `microphone_vad` (VAD), `speech_to_text` (STT),
     `text_aggregator` (TAG)
   - `text_to_speech` — `piper_tts` (default engine), `text_to_speech`

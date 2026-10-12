@@ -1,6 +1,6 @@
 # Keep the Docker build context small — the repo root is ~1.8G otherwise.
 # The Dockerfiles (deploy/Dockerfile.base, .nvidia) only COPY constraints.txt,
-# serve_requirements.txt, requirements-nvidia.txt and src/ — nothing below is
+# serve_requirements.txt, requirements-nvidia.txt and huri_core/ — nothing below is
 # needed in the build context.
 .venv/
 .git/

@@ -87,7 +87,7 @@ jobs:
           source .huri-local/env.sh
           python - <<'PY'
           import yaml
-          from src.client import load_client_config
+          from huri_core.client import load_client_config
           serve = yaml.safe_load(open("config/huri_local.generated.yaml"))
           app = serve["applications"][0]
           names = [d["name"] for d in app["deployments"]]

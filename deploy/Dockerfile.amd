@@ -79,4 +79,4 @@ RUN pip install --no-cache-dir -c /app/constraints.txt faster-whisper
 COPY requirements-amd.txt /app
 RUN pip install --no-cache-dir -c /app/constraints.txt -r requirements-amd.txt
 
-COPY src /app/src
+COPY huri_core /app/huri_core

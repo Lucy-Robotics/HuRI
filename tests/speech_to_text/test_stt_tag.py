@@ -3,8 +3,8 @@ import asyncio
 import numpy as np
 import pytest
 
-from src.modules.speech_to_text.events import Transcript, Voice
-from src.modules.speech_to_text.text_aggregator import TAG
+from huri_core.modules.speech_to_text.events import Transcript, Voice
+from huri_core.modules.speech_to_text.text_aggregator import TAG
 
 
 @pytest.mark.parametrize(
@@ -75,7 +75,7 @@ class FakeHandle:
 
 
 def _stt(handle):
-    from src.modules.speech_to_text.speech_to_text import STT
+    from huri_core.modules.speech_to_text.speech_to_text import STT
 
     # 20 ms blocks -> window 10 frames, step 5 frames (fast tests).
     return STT(_handle=handle, transcribe_window=0.2, transcribe_step=0.1)

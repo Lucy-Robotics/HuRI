@@ -4,8 +4,8 @@ from dataclasses import dataclass
 import numpy as np
 import pytest
 
-from src.core.bus import EventGraph
-from src.core.events import EventData
+from huri_core.core.bus import EventGraph
+from huri_core.core.events import EventData
 
 # ---------------------------------------------------------------------------
 # Helpers

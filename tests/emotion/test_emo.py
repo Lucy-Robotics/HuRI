@@ -2,7 +2,7 @@ import asyncio
 
 import numpy as np
 
-from src.modules.speech_to_text.events import Voice
+from huri_core.modules.speech_to_text.events import Voice
 
 
 class FakeHandle:
@@ -21,7 +21,7 @@ class FakeHandle:
 
 
 def _emo(handle):
-    from src.modules.emotion.prosody_analysis import EMO
+    from huri_core.modules.emotion.prosody_analysis import EMO
 
     # 20 ms blocks -> window of 10 frames (fast tests).
     return EMO(_handle=handle, analysis_window=0.2)

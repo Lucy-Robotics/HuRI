@@ -1,6 +1,6 @@
 huri_url: ws://localhost:8000/session
 
-interface_path: src.interfaces.cli_interface:cli_interface
+interface_path: huri_core.interfaces.cli_interface:cli_interface
 
 senders:
   audio:

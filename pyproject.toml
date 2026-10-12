@@ -1,3 +1,28 @@
+[build-system]
+requires = ["setuptools>=64,<82"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "huri-core"
+dynamic = ["version"]
+description = "HuRI: realtime, modular conversational pipeline for robots"
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.10"
+# Runtime dependencies are still installed from requirements*.txt; they move
+# into this table, split into [server] / [client] extras, in #73.
+dependencies = []
+
+[project.urls]
+Repository = "https://github.com/Lucy-Robotics/HuRI"
+
+[tool.setuptools.dynamic]
+# Single source of truth: huri_core/__init__.py. See RELEASING.md.
+version = { attr = "huri_core.__version__" }
+
+[tool.setuptools.packages.find]
+include = ["huri_core*"]
+
 [tool.black]
 line-length = 88
 target-version = ["py310"]

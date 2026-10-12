@@ -27,7 +27,7 @@ ray:
     applications:
       - name: huri-app
         route_prefix: /
-        import_path: src.app:app
+        import_path: huri_core.app:app
         runtime_env:
           env_vars:
             RAY_COLOR_PREFIX: "1"

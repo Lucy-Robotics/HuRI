@@ -103,13 +103,13 @@ jobs:
       - name: install the lint toolchain only
         # mypy has ignore_missing_imports, so it runs without ray/torch/etc.
         run: pip install -c constraints.txt black isort flake8 flake8-toml-config mypy
-      - run: black --check src tests
-      - run: isort --check-only src tests
-      - run: flake8 src tests
+      - run: black --check huri_core tests
+      - run: isort --check-only huri_core tests
+      - run: flake8 huri_core tests
       - name: mypy
-        # Not gating yet: src/modules/rag/{semantic_chunker,ingestion}.py carry
+        # Not gating yet: huri_core/modules/rag/{semantic_chunker,ingestion}.py carry
         # pre-existing errors. Remove `|| true` once those are fixed.
-        run: mypy src --check-untyped-defs || true
+        run: mypy huri_core --check-untyped-defs || true
       - name: mypy (files that are already clean must stay clean)
         # --follow-imports=silent: report only on the files listed below.
         # modules.py imports MOV, so mypy follows it into
@@ -119,8 +119,8 @@ jobs:
         # needed and unused depending on the environment.
         run: |
           mypy --check-untyped-defs --follow-imports=silent \
-            src/core src/interfaces src/modules/text_to_speech \
-            src/modules/speech_to_text src/modules/factory.py src/modules/modules.py
+            huri_core/core huri_core/interfaces huri_core/modules/text_to_speech \
+            huri_core/modules/speech_to_text huri_core/modules/factory.py huri_core/modules/modules.py
 
   plan:
     name: installer plan (${{ matrix.name }})
@@ -245,7 +245,7 @@ jobs:
         run: |
           python - <<'PY'
           import glob, sys
-          from src.client import load_client_config
+          from huri_core.client import load_client_config
           bad = []
           for path in sorted(glob.glob("config/client_*.yaml")):
               try:
@@ -260,7 +260,7 @@ jobs:
         run: |
           for mods in "" "rag" "vad,stt,tag,qag,rag" "vad,stt,tag,qag,rag,emo,eag,tts"; do
             HURI_MODULES="$mods" python -c "
-          import os, src.modules.modules as m
+          import os, huri_core.modules.modules as m
           got = m.get_modules()
           print(f'HURI_MODULES={os.environ[\"HURI_MODULES\"]!r:42s} -> {len(got)} modules')
           "

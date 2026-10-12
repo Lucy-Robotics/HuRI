@@ -12,12 +12,12 @@ import struct
 import numpy as np
 import pytest
 
-from src.core.huri import HuRI as _HuRIDeployment
-from src.core.module import Module
-from src.core.session import Session
-from src.modules.gesture.events import Motion
-from src.modules.modules import get_modules
-from src.modules.utils.sender import Sender
+from huri_core.core.huri import HuRI as _HuRIDeployment
+from huri_core.core.module import Module
+from huri_core.core.session import Session
+from huri_core.modules.gesture.events import Motion
+from huri_core.modules.modules import get_modules
+from huri_core.modules.utils.sender import Sender
 
 HuRI = _HuRIDeployment.func_or_class
 

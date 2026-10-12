@@ -2,7 +2,7 @@
 huri_url: ws://localhost:8000/session
 
 # Define interface to be used's import path
-interface_path: src.interfaces.cli_interface:cli_interface
+interface_path: huri_core.interfaces.cli_interface:cli_interface
 
 # Define senders to be used and their custom args
 senders:
@@ -33,7 +33,7 @@ hooks:
 modules:
   # module tag can be anything
   example:
-    # module name must be in the list of available module in HuRI's instance (src.modules.modules:get_modules)
+    # module name must be in the list of available module in HuRI's instance (huri_core.modules.modules:get_modules)
     name: my_module
     # if my_module init with "model", "sample_rate" and "hello" params, they can be customized here
     args:
