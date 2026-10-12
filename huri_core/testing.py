@@ -132,7 +132,8 @@ class ModuleHarness:
             )
 
     async def feed(self, event: EventData) -> List[EventData]:
-        """Process one event; returns what the module emitted for it."""
+        """Process one event to completion; returns what the module emitted
+        for it. To feed several, use feed_all(), which runs them like the bus."""
 
         self._check(event, self.module.input_event, "input got")
         result = self.module.process(event)
@@ -146,9 +147,15 @@ class ModuleHarness:
         return emitted
 
     async def feed_all(self, *events: EventData) -> List[EventData]:
+        """Process events the way the bus does: each in its own task, started
+        in order and running concurrently — a streaming module may answer an
+        event only once a later one arrived (TTS: the end-of-utterance token).
+        Returns everything emitted, grouped by input event, in input order."""
+
+        tasks = [asyncio.ensure_future(self.feed(event)) for event in events]
         out: List[EventData] = []
-        for event in events:
-            out += await self.feed(event)
+        for emitted in await asyncio.gather(*tasks):
+            out += emitted
         return out
 
     async def finalize(self) -> None:

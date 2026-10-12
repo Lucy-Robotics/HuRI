@@ -275,12 +275,14 @@ Note that `requirements.txt` also contains the lint/test toolchain.
 client never installs Ray or FastAPI:
 
 ```sh
-pip install "huri-core[client] @ git+https://github.com/Lucy-Robotics/HuRI.git"   # client SDK only
-pip install "huri-events @ git+https://github.com/Lucy-Robotics/HuRI.git#subdirectory=packages/huri-events"   # the curated events
+pip install "huri-core[client] @ git+https://github.com/Lucy-Robotics/HuRI.git@dev"   # client SDK only
+pip install "huri-events @ git+https://github.com/Lucy-Robotics/HuRI.git@dev#subdirectory=packages/huri-events"   # the curated events
 pip install -e examples/cli                                                        # + the reference CLI (huri-cli)
 pip install -c constraints.txt -e ".[modules,dev]" -e packages/huri-events        # server + curated modules and events
 ```
 
+Replace `@dev` with a release tag (`@0.4.0`, ...) to pin a version; without
+a ref pip would take the repository's default branch.
 `[server]` is Ray Serve + FastAPI and the pins that keep them working;
 `[modules]` adds the CPU dependencies of the modules in this repo. The GPU
 backends still come from `requirements-{nvidia,amd}.txt`.

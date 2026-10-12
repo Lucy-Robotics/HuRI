@@ -171,3 +171,36 @@ def test_old_client_config_format_gets_a_migration_hint():
     legacy = {"user_id": "u", "interface_path": "x:y", "senders": {}, "hooks": {}}
     with pytest.raises(ValueError, match="subscribe.*send"):
         ClientConfig.from_dict(legacy)
+
+
+def test_server_answers_a_malformed_handshake_with_a_session_error():
+    """Not JSON, or not an object: still a session_error, never a dropped socket."""
+    from huri_core.core.huri import HuRI
+
+    run_session = HuRI.func_or_class.run_session
+
+    class FakeServer:
+        module_factory = type("F", (), {"registered": staticmethod(lambda: [])})()
+
+    class FakeWS:
+        def __init__(self, payload):
+            self.payload, self.sent, self.closed = payload, [], None
+
+        async def accept(self):
+            pass
+
+        async def receive_json(self):
+            if isinstance(self.payload, Exception):
+                raise self.payload
+            return self.payload
+
+        async def send_json(self, message):
+            self.sent.append(message)
+
+        async def close(self, code, reason):
+            self.closed = code
+
+    for payload in (json.JSONDecodeError("bad", "x", 0), ["not", "an", "object"]):
+        ws = FakeWS(payload)
+        asyncio.run(run_session(FakeServer(), ws))
+        assert ws.sent[0]["type"] == "session_error" and ws.closed == 1008
