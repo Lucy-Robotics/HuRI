@@ -152,3 +152,32 @@ def test_harness_needs_no_ray_server_or_client_stack():
         [sys.executable, "-c", code], cwd=ROOT, capture_output=True, text=True
     )
     assert res.returncode == 0, res.stderr
+
+
+class WaitsForTheEnd(Module):
+    """Like TTS: the first event's output only comes once the last arrived."""
+
+    input_type, output_type = "toy.word", "toy.word"
+
+    def __init__(self):
+        self.done = asyncio.Event()
+        self.words = []
+
+    async def process(self, data: Word):
+        self.words.append(data.text)
+        if data.text == "end":
+            self.done.set()
+            return
+        if len(self.words) == 1:
+            await self.done.wait()
+            yield Word(" ".join(self.words))
+
+
+def test_feed_all_runs_events_concurrently_like_the_bus():
+    out = asyncio.run(
+        asyncio.wait_for(
+            ModuleHarness(WaitsForTheEnd).feed_all(Word("a"), Word("b"), Word("end")),
+            timeout=5,
+        )
+    )
+    assert out == [Word("a b end")]
