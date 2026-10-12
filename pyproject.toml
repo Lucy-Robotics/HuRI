@@ -32,6 +32,9 @@ server = [
 client = [
   "websockets>=16,<17",
   "omegaconf>=2.3,<2.4",
+  # `huri hub` compares manifests' huri-core ranges.
+  "packaging>=23",
+  "tomli>=2; python_version < '3.11'",
 ]
 dev = [
   "black==26.3.1",
@@ -42,6 +45,9 @@ dev = [
   "pytest==9.0.3",
   "pytest-asyncio==1.4.0",
 ]
+
+[project.scripts]
+huri = "huri_core.cli:main"
 
 [project.urls]
 Repository = "https://github.com/Lucy-Robotics/HuRI"

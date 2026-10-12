@@ -60,7 +60,9 @@ class ModuleManifest:
     source: str = "<manifest>"
 
 
-def _loads(text: str) -> Dict[str, Any]:
+def loads_toml(text: str) -> Dict[str, Any]:
+    """tomllib, or tomli on Python 3.10."""
+
     if sys.version_info >= (3, 11):
         import tomllib
     else:  # pragma: no cover - python 3.10
@@ -183,7 +185,7 @@ def _validate_requirement(requirement: str, problems: List[str]) -> None:
 
 def loads_manifest(text: str, source: str = "<manifest>") -> ModuleManifest:
     try:
-        raw = _loads(text)
+        raw = loads_toml(text)
     except ValueError as e:  # tomllib.TOMLDecodeError
         raise ManifestError(source, [f"invalid TOML: {e}"]) from e
     return parse_manifest(raw, source)

@@ -93,7 +93,7 @@ build the app whatever its hardware.
 |---|---|---|
 | 0 | an import path listed in `HURI_MODULES` | none |
 | 1 | a pip-installable package with entry points | none |
-| 2 | discoverable (GitHub topic `huri-module`) | none |
+| 2 | discoverable (GitHub topic `huri-module`), found by `huri hub search` / `list` | none |
 | 3 | listed in [huri-modules](../huri-modules) — "verified" | a pull request, CI-checked ([ACCEPTANCE.md](../huri-modules/ACCEPTANCE.md)) |
 
 A module is tested alone with `huri_core.testing` (`ModuleHarness`, and

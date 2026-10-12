@@ -429,6 +429,23 @@ list it in `HURI_MODULES` (`HURI_MODULES=stt,my_pkg.servo:Servo`) and reference
 it from the client config with `module: my_pkg.servo:Servo` instead of `name:`.
 A client can never make the server import a path the server did not list.
 
+### Finding modules: `huri hub`
+
+```sh
+huri hub search gesture             # GitHub repositories tagged `huri-module`
+huri hub list                       # modules supporting the installed huri-core
+huri hub list --verified            # only the curated registry (huri-modules)
+huri hub list --core 0.5.0 --all    # another version; --all keeps unsupported ones
+huri hub install servo              # pip-installs it; does not enable it
+```
+
+`list` merges the verified registry with community modules, read from their
+`pyproject.toml` and `huri_module.toml` on GitHub without installing them, and
+keeps those whose manifest supports the huri-core version. Nothing found is
+ever loaded: enabling a module stays the server operator's `HURI_MODULES`
+decision. `GITHUB_TOKEN` raises GitHub's rate limit; `--registry` (or
+`HURI_REGISTRY`) points at another `registry.toml`.
+
 ### Module manifest (`huri_module.toml`)
 
 A module package ships one `huri_module.toml` per module, next to its code, so
