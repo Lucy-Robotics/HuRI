@@ -1,0 +1,7 @@
+name = "vad"
+summary = "Detects speech in microphone frames (WebRTC VAD)"
+input = { topic = "huri.audio.in", event = "huri_core.core.events:BytesEvent" }
+output = { topic = "huri.voice", event = "huri_events.speech:Voice" }
+events = ["huri-events>=0.1,<0.2"]
+requires = { gpu = false, actuation = false }
+huri_core = ">=0.4.0.dev0,<0.5"

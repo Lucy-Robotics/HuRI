@@ -8,9 +8,9 @@ from ray import serve
 from ray.serve import handle
 
 from huri_core.core.compat import check_session
+from huri_core.core.factory import EventData, EventDataFactory, Module, ModuleFactory
 from huri_core.core.plugins import installed_modules
-from huri_core.modules.factory import EventData, EventDataFactory, Module, ModuleFactory
-from huri_core.modules.utils.sender import Sender
+from huri_core.core.sender import Sender
 
 from .app import app
 from .dataclasses.config import ClientConfig

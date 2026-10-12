@@ -4,6 +4,7 @@ import os
 from ray.serve import Application
 
 from huri_core.core.compat import check_manifests, check_modules
+from huri_core.core.factory import bind_deployment_handles
 from huri_core.core.huri import HuRI
 from huri_core.core.plugins import (
     find_manifest,
@@ -11,7 +12,6 @@ from huri_core.core.plugins import (
     load_modules,
     parse_selection,
 )
-from huri_core.modules.factory import bind_deployment_handles
 
 logger = logging.getLogger("ray.serve")
 

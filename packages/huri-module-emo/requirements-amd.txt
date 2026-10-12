@@ -1,0 +1,4 @@
+# Hardware-specific pins for huri-module-emo on AMD; install with
+#   pip install -c constraints.txt -r requirements-amd.txt -e .
+# torch/torchaudio come from the ROCm index (see deploy/Dockerfile.amd).
+transformers==4.46.3

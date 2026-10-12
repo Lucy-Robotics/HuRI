@@ -21,7 +21,7 @@ class FakeHandle:
 
 
 def _emo(handle):
-    from huri_core.modules.emotion.prosody_analysis import EMO
+    from huri_emo.module import EMO
 
     # 20 ms blocks -> window of 10 frames (fast tests).
     return ModuleHarness(EMO, handle=LocalHandle(handle), analysis_window=0.2)

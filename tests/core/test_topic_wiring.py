@@ -16,8 +16,8 @@ from huri_events.motion import Motion
 from huri_core.core.compat import CompatibilityError, check_session
 from huri_core.core.module import Module
 from huri_core.core.plugins import installed_modules, load_modules
+from huri_core.core.sender import Sender
 from huri_core.core.session import Session
-from huri_core.modules.utils.sender import Sender
 
 
 class _Stub(Module):

@@ -138,35 +138,6 @@ def test_local_handle_reports_a_method_the_fake_lacks():
         LocalHandle(FakeDeployment()).nope
 
 
-def test_a_real_streaming_module_runs_on_a_fake_deployment():
-    from huri_events.question import RAGQuestion
-    from huri_events.speech import Transcript
-    from huri_events.text import Token
-
-    from huri_core.modules.rag.rag import RAG
-
-    class FakeRAGHandle:
-        async def stream(self, query):
-            for delta in ("Hello", " ", query.question):
-                yield delta
-
-        async def save_conversation(self, user_id, history):
-            self.saved = (user_id, history)
-
-    fake = FakeRAGHandle()
-    harness = ModuleHarness(RAG, handle=LocalHandle(fake), user_id="alice")
-    out = harness.run(RAGQuestion(Transcript("world", True), None))
-    assert out == [
-        Token("Hello", False),
-        Token(" ", False),
-        Token("world", False),
-        Token("", True),
-    ]
-
-    asyncio.run(harness.finalize())
-    assert fake.saved[0] == "alice" and fake.saved[1][-1]["content"] == "Hello world"
-
-
 def test_harness_needs_no_ray_server_or_client_stack():
     """Usable with only the base huri-core install."""
     code = (

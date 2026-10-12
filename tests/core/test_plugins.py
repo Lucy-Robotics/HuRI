@@ -8,8 +8,8 @@ import pytest
 from huri_core.core import plugins
 from huri_core.core.dataclasses.config import ModuleConfig
 from huri_core.core.events import JsonEvent
+from huri_core.core.factory import ModuleFactory
 from huri_core.core.module import Module
-from huri_core.modules.factory import ModuleFactory
 
 
 class ToyModule(Module):

@@ -1412,8 +1412,12 @@ install_python_deps() {
   # which is how the server finds them.
   info "  huri-core (editable)"
   run "$PIP" install "${C[@]}" --no-deps -e "$REPO_ROOT"
-  # The curated events (huri.* topics), a separate distribution.
-  run "$PIP" install "${C[@]}" --no-deps -e "$REPO_ROOT/packages/huri-events"
+  # The curated events and modules: one distribution each under packages/.
+  # Their dependencies come from the requirement files installed above.
+  local pkg
+  for pkg in "$REPO_ROOT"/packages/*/; do
+    run "$PIP" install "${C[@]}" --no-deps -e "$pkg"
+  done
   # The reference CLI client (huri-cli); its deps are in requirements.txt.
   run "$PIP" install "${C[@]}" --no-deps -e "$REPO_ROOT/examples/cli"
 
@@ -1466,7 +1470,7 @@ install_python_deps() {
 generate_cpu_requirements() {
   # Derived from requirements-nvidia.txt: drop the torch pins (installed above
   # from the CPU/ROCm index), swap onnxruntime-gpu for the CPU build, and drop
-  # the EMAGE *rendering/training* extras — huri_core/modules/gesture/emage only needs
+  # the EMAGE *rendering/training* extras — huri_mov/emage only needs
   # torch + transformers + omegaconf + huggingface_hub.
   local out="$STATE_DIR/requirements-local.generated.txt" p
   # Always safe to drop: torch/torchaudio come from the vendor index above, and
@@ -2183,7 +2187,7 @@ export HSA_OVERRIDE_GFX_VERSION=$GFX_OVERRIDE"
 # Source this for a shell configured exactly like a Serve replica:
 #     source .huri-local/env.sh
 #     python -m huri_core.launch_huri                      # run HuRI without serve deploy
-#     python -m huri_core.modules.rag.ingestion --help     # feed the RAG memory
+#     python -m huri_rag.ingestion --help     # feed the RAG memory
 export HURI_ROOT="$REPO_ROOT"
 export HURI_STATE="$STATE_DIR"
 # shellcheck disable=SC1091
@@ -2644,7 +2648,7 @@ PY
   fi
 
   if [[ "$P_GES_DEV" != "off" ]]; then
-    if (cd "$REPO_ROOT" && "$VPY" -c 'from huri_core.modules.gesture.emage import EmageAudioModel' 2>/dev/null); then
+    if (cd "$REPO_ROOT" && "$VPY" -c 'from huri_mov.emage import EmageAudioModel' 2>/dev/null); then
       ok "EMAGE importable"
     else
       err "EMAGE import failed"; failures=1
@@ -2669,7 +2673,7 @@ PY
       else
         warn "qdrant has no 'documents' collection — document retrieval will return nothing"
         note "collections present: ${cols:-<none>}"
-        note "Ingest some: source .huri-local/env.sh && python -m huri_core.modules.rag.ingestion --help"
+        note "Ingest some: source .huri-local/env.sh && python -m huri_rag.ingestion --help"
         note "(conversational memory still works — RAGHandle creates it on demand)"
       fi
     elif (( QDRANT_REMOTE )); then

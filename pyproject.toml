@@ -33,20 +33,13 @@ client = [
   "websockets>=16,<17",
   "omegaconf>=2.3,<2.4",
 ]
-# Dependencies of the curated modules still living in this repo (CPU set; the
-# GPU backends stay in requirements-{nvidia,amd}.txt). They move to each
-# module's own package when modules are split out.
-modules = [
+# Dependencies of the TTS module, the last curated module inside huri-core
+# (#84 splits it per backend). Every other module declares its own, in its
+# package under packages/.
+tts = [
   "huri-core[server]",
   "numpy>=1.26,<2",
-  "webrtcvad==2.0.10",
-  "faster-whisper>=1.2.1,<1.3",
   "piper-tts>=1.8,<1.9",
-  "qdrant-client>=1.18,<1.19",
-  "sentence-transformers>=3.2.1,<3.3",
-  "pypdf>=5.1,<5.2",
-  "semantic_chunker==0.2.0",
-  "httpx>=0.27.2,<0.28",
 ]
 dev = [
   "black==26.3.1",
@@ -63,17 +56,11 @@ Repository = "https://github.com/Lucy-Robotics/HuRI"
 
 # Plugin registration (see huri_core/core/plugins.py). An installed package
 # adds modules and events the same way, from its own pyproject.toml; the
-# curated events are registered by huri-events (packages/huri-events).
+# curated events are registered by huri-events (packages/huri-events) and the
+# curated modules by their packages (packages/huri-module-*).
 [project.entry-points."huri.modules"]
-vad = "huri_core.modules.speech_to_text.microphone_vad:VAD"
-stt = "huri_core.modules.speech_to_text.speech_to_text:STT"
-tag = "huri_core.modules.speech_to_text.text_aggregator:TAG"
-emo = "huri_core.modules.emotion.prosody_analysis:EMO"
-eag = "huri_core.modules.emotion.emotion_aggregator:EAG"
-qag = "huri_core.modules.rag.question_aggregator:QAG"
-rag = "huri_core.modules.rag.rag:RAG"
+# Still in huri-core until #84 splits it per backend.
 tts = "huri_core.modules.text_to_speech.text_to_speech:TTS"
-mov = "huri_core.modules.gesture.gesture:MOV"
 
 [tool.setuptools.dynamic]
 # Single source of truth: huri_core/__init__.py. See RELEASING.md.
@@ -111,10 +98,20 @@ warn_return_any = true
 warn_unused_configs = true
 exclude = [
   "^tests/",
+  "^packages/[^/]+/tests/",
 ]
 
 [tool.pytest.ini_options]
-testpaths = ["tests", "packages/huri-events/tests"]
+testpaths = ["tests", "packages/*/tests"]
 # Separate distributions living in this repo (packages/*, examples/cli).
-pythonpath = ["packages/huri-events", "examples/cli"]
+pythonpath = [
+  "packages/huri-events",
+  "packages/huri-module-vad",
+  "packages/huri-module-stt",
+  "packages/huri-module-tag",
+  "packages/huri-module-emo",
+  "packages/huri-module-rag",
+  "packages/huri-module-mov",
+  "examples/cli",
+]
 python_files = ["test_*.py"]

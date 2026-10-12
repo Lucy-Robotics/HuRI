@@ -1,8 +1,8 @@
 """Inspect conversation memories: current strength, decay projection, fate.
 
 Usage:
-    python -m huri_core.modules.rag.memory.memory_inspect
-    python -m huri_core.modules.rag.memory.memory_inspect --user-id <id>
+    python -m huri_rag.memory_inspect
+    python -m huri_rag.memory_inspect --user-id <id>
 """
 
 import argparse

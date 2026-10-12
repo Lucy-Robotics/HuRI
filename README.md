@@ -150,7 +150,7 @@ route (which is green even when every deployment is dead).
 
 `source .huri-local/env.sh` gives a shell configured exactly like a Serve
 replica (model paths, `HURI_MODULES`, STT device, API key), so
-`python -m huri_core.launch_huri` and `python -m huri_core.modules.rag.ingestion` work
+`python -m huri_core.launch_huri` and `python -m huri_rag.ingestion` work
 without `serve deploy`.
 
 Re-run a single stage with `--only`:
@@ -169,8 +169,8 @@ must match the one the server queries with**, or the vectors will not line up:
 
 ```sh
 source .huri-local/env.sh
-python -m huri_core.modules.rag.ingestion --help
-python -m huri_core.modules.rag.ingestion \
+python -m huri_rag.ingestion --help
+python -m huri_rag.ingestion \
   --embedding-model "$HURI_EMBED_MODEL" --embedding-url "$HURI_EMBED_URL" ...
 ```
 
@@ -278,12 +278,13 @@ client never installs Ray or FastAPI:
 pip install "huri-core[client] @ git+https://github.com/Lucy-Robotics/HuRI.git"   # client SDK only
 pip install "huri-events @ git+https://github.com/Lucy-Robotics/HuRI.git#subdirectory=packages/huri-events"   # the curated events
 pip install -e examples/cli                                                        # + the reference CLI (huri-cli)
-pip install -c constraints.txt -e ".[modules,dev]" -e packages/huri-events        # server + curated modules and events
+pip install -c constraints.txt -e ".[server,tts,dev]"                              # server (+ TTS, still in core)
+for p in packages/*/; do pip install -c constraints.txt -e "$p"; done              # curated events and modules
 ```
 
-`[server]` is Ray Serve + FastAPI and the pins that keep them working;
-`[modules]` adds the CPU dependencies of the modules in this repo. The GPU
-backends still come from `requirements-{nvidia,amd}.txt`.
+`[server]` is Ray Serve + FastAPI and the pins that keep them working; each
+module package declares its own dependencies, and the GPU ones ship
+`requirements-{nvidia,amd}.txt` pins next to it.
 
 ## Testing a change
 
@@ -322,24 +323,27 @@ See `tests/speech_to_text/test_stt_tag.py` and `tests/core/test_testing.py`.
 - **root** — server entrypoints: `huri_core/app.py`, `huri_core/launch_huri.py`
 - **huri_core/core** — `huri` (ingress + per-session router), `bus` (event graph),
   `client` (the client SDK, `HuRIClient`), `module`, `session`, `events`, `plugins` (module and
-  event discovery), `user_config`, `dataclasses/config`
+  event discovery), `manifest`, `compat` (startup/session checks), `factory`
+  (builds a session's modules), `sender` (forwards events to clients),
+  `user_config`, `dataclasses/config`
+- **huri_core/testing** — `ModuleHarness` / `LocalHandle`, to test a module alone
 - **packages/huri-events** — `huri-events`, the curated event classes (one per
   `huri.*` topic, with its wire format): a separate, light distribution
   (huri-core + numpy) that clients install to decode the topics
 - **examples/cli** — `huri-cli`, the reference command-line client: a separate
   package built on the client SDK (microphone and prompt in; text, speech and a
   gesture view out)
-- **huri_core/modules**
-  - `speech_to_text` — `microphone_vad` (VAD), `speech_to_text` (STT),
-    `text_aggregator` (TAG)
-  - `text_to_speech` — `piper_tts` (default engine), `text_to_speech`
-    (CosyVoice3 + the `TTS` module)
-  - `rag` — `rag`, `question_aggregator` (QAG), `ingestion`, `semantic_chunker`,
-    `qdrant_utils`, memory maintenance/inspection
-  - `emotion` — `prosody_analysis` (EMO), `emotion_aggregator` (EAG)
-  - `gesture` — `gesture` + the vendored `emage` model code
-  - `utils` — `sender` (forwards events to clients)
-  - `factory` — builds a session's modules from the registry
+- **packages/huri-module-\*** — the curated modules, one distribution each, with
+  its own `pyproject.toml`, `huri_module.toml` manifest(s), tests and, for GPU
+  modules, `requirements-{nvidia,amd}.txt`:
+  - `huri-module-vad` (VAD), `huri-module-stt` (STT, faster-whisper),
+    `huri-module-tag` (TAG)
+  - `huri-module-emo` — EMO (prosody emotion) and EAG (its aggregator)
+  - `huri-module-rag` — RAG, QAG (question aggregator), `ingestion`,
+    `semantic_chunker`, `qdrant_utils`, memory maintenance/inspection
+  - `huri-module-mov` — MOV (gestures) + the vendored `emage` model code
+- **huri_core/modules/text_to_speech** — `piper_tts` (default engine),
+  `text_to_speech` (CosyVoice3 + the `TTS` module); the last module inside core
 
 ## Modules as plugins
 

@@ -1,62 +1,9 @@
 import asyncio
 
 import numpy as np
-import pytest
 from huri_events.speech import Transcript, Voice
 
-from huri_core.modules.speech_to_text.text_aggregator import TAG
 from huri_core.testing import LocalHandle, ModuleHarness
-
-
-@pytest.mark.parametrize(
-    "current,new,expected",
-    [
-        (
-            "what is the weather",
-            "the weather like in Paris today",
-            "what is the weather like in Paris today",
-        ),
-        # No overlap must never corrupt/replace the sentence.
-        (
-            "what is the weather like",
-            "in Paris today",
-            "what is the weather like in Paris today",
-        ),
-        (
-            "What is the weather like.",
-            "weather like in Paris today?",
-            "What is the weather like in Paris today?",
-        ),
-        (
-            "I want to book a table for two",
-            "for two people at eight",
-            "I want to book a table for two people at eight",
-        ),
-        ("it is a very very", "very very long day", "it is a very very long day"),
-        # Word cut by the window edge.
-        ("what is the weath", "weather like", "what is the weather like"),
-        # New text fully contained in the tail.
-        ("hello there my friend", "my friend", "hello there my friend"),
-        ("", "hello", "hello"),
-        ("hello", "", "hello"),
-    ],
-)
-def test_merge(current, new, expected):
-    assert TAG()._merge(current, new) == expected
-
-
-def test_tag_emits_on_end_and_resets():
-    out = ModuleHarness(TAG).run(
-        Transcript("what is the", False),
-        Transcript("the weather", False),
-        Transcript("weather like", True),
-        Transcript("", True),
-        Transcript("next question", True),
-    )
-    assert [q.transcript.text for q in out] == [
-        "what is the weather like",
-        "next question",
-    ]
 
 
 class FakeWhisper:
@@ -75,7 +22,7 @@ class FakeWhisper:
 
 
 def _stt(whisper):
-    from huri_core.modules.speech_to_text.speech_to_text import STT
+    from huri_stt.module import STT
 
     # 20 ms blocks -> window 10 frames, step 5 frames (fast tests).
     return ModuleHarness(
@@ -106,17 +53,12 @@ def test_end_event_during_inflight_transcription_is_not_lost():
         assert await stt.feed(Voice(None)) == []
         gate.set()
         out = await first
-        # STT does not merge: one Transcript per pass, in order.
+        # STT does not merge: one Transcript per pass, in order (TAG stitches
+        # them, see huri-module-tag's tests).
         assert out == [
             Transcript("what is the", False),
             Transcript("the weather", True),
         ]
-        # ...TAG stitches them.
-        tag = TAG()
-        question = None
-        for t in out:
-            question = await tag.process(t) or question
-        assert question.transcript.text == "what is the weather"
 
     asyncio.run(run())
 
@@ -159,23 +101,5 @@ def test_short_utterance_below_one_window_is_still_transcribed():
         assert out == []
         out = await stt.feed(Voice(None))
         assert out == [Transcript("yes", True)]
-
-    asyncio.run(run())
-
-
-def test_min_prefix_is_configurable():
-    # "th" (from a cut "the") only matches when min_prefix allows 2 chars.
-    assert TAG(min_prefix=3)._merge("what is th", "the weather") == (
-        "what is th the weather"
-    )
-    assert TAG(min_prefix=2)._merge("what is th", "the weather") == (
-        "what is the weather"
-    )
-
-    async def run():
-        tag = TAG(min_prefix=2)
-        await tag.process(Transcript("what is th", False))
-        q = await tag.process(Transcript("the weather", True))
-        assert q.transcript.text == "what is the weather"
 
     asyncio.run(run())

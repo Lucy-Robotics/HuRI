@@ -582,7 +582,7 @@ if __name__ == "__main__":
         python ingestion.py --collection "my_docs" pdf report.pdf
 
         # Use a different ingestion strategy
-        python huri_core/modules/rag/ingestion.py \
+        python huri_rag/ingestion.py \
 --chunking semantic --semantic-strategy threshold pdf "EN.pdf"
 
     """

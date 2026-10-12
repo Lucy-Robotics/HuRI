@@ -1,7 +1,7 @@
 """Periodic memory maintenance: decay-based pruning + consolidation.
 
 Run every N days (cron/systemd timer):
-    python -m huri_core.modules.rag.memory_maintenance
+    python -m huri_rag.memory_maintenance
 Strong memories are kept, weak ones are merged into a consolidated memory,
 dead ones are deleted. Decay itself is computed lazily at query time in
 rag.py; this job only prunes and compresses.

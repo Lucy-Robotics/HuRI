@@ -141,9 +141,7 @@ class RAGHandle:
                 f"(found: {', '.join(names) or 'none'})"
             )
             print("[RAGHandle]          document retrieval returns nothing.")
-            print(
-                "[RAGHandle]          Ingest: python -m huri_core.modules.rag.ingestion"
-            )
+            print("[RAGHandle]          Ingest: python -m huri_rag.ingestion")
 
     def _resolve_user_context(self, _user_id: str) -> tuple[str, dict | None]:
         collection = self._cfg.default_collection

@@ -107,9 +107,9 @@ jobs:
       - run: isort --check-only huri_core tests
       - run: flake8 huri_core tests
       - name: mypy
-        # Not gating yet: huri_core/modules/rag/{semantic_chunker,ingestion}.py carry
+        # Not gating yet: packages/huri-module-rag/huri_rag/{semantic_chunker,ingestion}.py carry
         # pre-existing errors. Remove `|| true` once those are fixed.
-        run: mypy huri_core --check-untyped-defs || true
+        run: mypy huri_core packages --check-untyped-defs || true
       - name: mypy (files that are already clean must stay clean)
         # --follow-imports=silent: report only on the files listed below.
         # modules.py imports MOV, so mypy follows it into
@@ -120,7 +120,7 @@ jobs:
         run: |
           mypy --check-untyped-defs --follow-imports=silent \
             huri_core/core packages/huri-events/huri_events examples/cli/huri_cli huri_core/modules/text_to_speech \
-            huri_core/modules/speech_to_text huri_core/modules/factory.py
+            packages/huri-module-vad/huri_vad packages/huri-module-stt/huri_stt packages/huri-module-tag/huri_tag
 
   plan:
     name: installer plan (${{ matrix.name }})
@@ -239,7 +239,8 @@ jobs:
             torch==2.3.1 torchaudio==2.3.1
           pip install -c constraints.txt -r serve_requirements.txt -r requirements.txt
           # Registers the modules and events (entry points) — HuRI finds them there.
-          pip install --no-deps -e . -e packages/huri-events -e examples/cli
+          pip install --no-deps -e . -e examples/cli
+          for pkg in packages/*/; do pip install --no-deps -e "$pkg"; done
       - run: pytest -q
       - name: the shipped client configs load through the real loader
         # Stricter than the `configs` job: this exercises ClientConfig.from_dict
