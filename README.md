@@ -363,6 +363,9 @@ See `tests/speech_to_text/test_stt_tag.py` and `tests/core/test_testing.py`.
 - **huri-modules** — the curated-module registry (`registry.toml`, the
   "verified" index), its CI check, the listing criteria (`ACCEPTANCE.md`) and
   `install.sh`; laid out to become the `huri-modules` repository
+- **templates/huri-plugin-template** — the starting point for a new module
+  (entry point, manifest, own events package, tests, per-hardware install,
+  CI); laid out to become the `huri-plugin-template` repository
 - **tests/integration** — the whole curated pipeline in one session, real
   modules on the real bus with faked model deployments
 - **examples/cli** — `huri-cli`, the reference command-line client: a separate

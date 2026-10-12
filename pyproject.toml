@@ -87,6 +87,7 @@ warn_unused_configs = true
 exclude = [
   "^tests/",
   "^packages/[^/]+/tests/",
+  "^templates/.*/tests/",
 ]
 
 [tool.pytest.ini_options]
