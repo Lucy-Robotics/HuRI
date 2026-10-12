@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "huri-module-example"
 version = "0.1.0"
-description = "An example HuRI module: shouts every finished transcript"
+description = "HuRI module example: shouts every finished transcript"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
@@ -19,10 +19,10 @@ dependencies = [
 [project.optional-dependencies]
 dev = ["pytest>=8"]
 
-# How HuRI finds the module: once installed, `name: shout` works in a client's
+# How HuRI finds the module: once installed, `name: example` works in a client's
 # YAML (and the server's HURI_MODULES).
 [project.entry-points."huri.modules"]
-shout = "huri_example.module:Shouter"
+example = "huri_example.module:Shouter"
 
 [tool.setuptools.packages.find]
 include = ["huri_example*"]

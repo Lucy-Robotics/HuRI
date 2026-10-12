@@ -258,20 +258,54 @@ def _manifest_files(ep: Optional[EntryPoint], module_path: str) -> Iterator[Path
                 yield path
 
 
+def _module_dir(module_path: str) -> Optional[Path]:
+    """Directory holding a module's file (imports its parent packages, as
+    loading the module does anyway)."""
+
+    try:
+        spec = importlib.util.find_spec(module_path)
+    except (ImportError, ValueError):
+        return None
+    if spec is None or not spec.origin:
+        return None
+    return Path(spec.origin).parent
+
+
 def find_manifest(name: str) -> Optional[ModuleManifest]:
-    """The manifest of an installed module (by name) or of an import path,
-    without importing the module. None when the module ships none."""
+    """The manifest of an installed module (by name) or of an import path.
+    None when the module ships none.
+
+    An import path that is the target of an installed entry point is that
+    module: its manifest is found as for its name. Any other import path only
+    looks next to the module's own file (`huri_module.toml`, or
+    `manifests/*/huri_module.toml`), for a manifest named after the class."""
 
     if is_import_path(name):
-        ep, module_path = None, name.split(":", 1)[0]
-        wanted = name.split(":", 1)[1].lower()
-    else:
-        ep = _entry_points(MODULES_GROUP).get(name)
-        if ep is None:
+        installed = [
+            ep for ep in _entry_points(MODULES_GROUP).values() if ep.value == name
+        ]
+        if installed:
+            return find_manifest(installed[0].name)
+        module_path, attr = name.split(":", 1)
+        directory = _module_dir(module_path)
+        if directory is None:
             return None
-        module_path, wanted = ep.value.split(":", 1)[0], name
+        wanted = attr.split(".")[-1].lower()
+        candidates = [directory / MANIFEST_FILE]
+        candidates += sorted(directory.glob(f"manifests/*/{MANIFEST_FILE}"))
+        for path in candidates:
+            if path.is_file():
+                manifest = loads_manifest(path.read_text(), str(path))
+                if manifest.name == wanted:
+                    return manifest
+        return None
+
+    ep = _entry_points(MODULES_GROUP).get(name)
+    if ep is None:
+        return None
+    module_path = ep.value.split(":", 1)[0]
     for path in _manifest_files(ep, module_path):
         manifest = loads_manifest(path.read_text(), str(path))
-        if manifest.name == wanted:
+        if manifest.name == name:
             return manifest
     return None

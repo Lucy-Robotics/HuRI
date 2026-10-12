@@ -106,7 +106,8 @@ def test_invalid_toml():
 def write_package(root: Path, name: str, manifest: str) -> None:
     pkg = root / name
     pkg.mkdir()
-    (pkg / "__init__.py").write_text("raise RuntimeError('must not be imported')\n")
+    (pkg / "__init__.py").write_text("")
+    (pkg / "module.py").write_text("raise RuntimeError('must not be imported')\n")
     (pkg / "huri_module.toml").write_text(manifest)
 
 
@@ -193,3 +194,34 @@ def test_manifest_without_output_for_a_producing_module():
     )
     with pytest.raises(CompatibilityError, match="no output"):
         check(text)
+
+
+def test_import_path_of_an_installed_module_uses_its_entry_point_manifest(
+    tmp_path, monkeypatch
+):
+    """Enabling a packaged module by import path must not skip its manifest
+    (its requires.actuation, its version ranges)."""
+    (tmp_path / "huri_module.toml").write_text(FULL)
+    dist = SimpleNamespace(
+        name="acme-servo",
+        files=[Path("huri_module.toml")],
+        locate_file=lambda f: tmp_path / f,
+    )
+    ep = SimpleNamespace(
+        name="servo", value="acme_driver.module:ServoDriver", dist=dist
+    )
+    monkeypatch.setattr(plugins, "entry_points", lambda group: [ep])
+    manifest = plugins.find_manifest("acme_driver.module:ServoDriver")
+    assert manifest is not None and manifest.name == "servo" and manifest.actuation
+
+
+def test_import_path_lookup_never_wanders_into_other_packages(tmp_path, monkeypatch):
+    """Only the module's own directory is read, not its whole tree."""
+    namespace = tmp_path / "ns"
+    namespace.mkdir()
+    write_package(namespace, "other_pkg", FULL.replace('"servo"', '"tts"'))
+    (namespace / "mine.py").write_text("")
+    monkeypatch.syspath_prepend(str(tmp_path))
+    monkeypatch.setattr(plugins, "entry_points", lambda group: [])
+    assert plugins.find_manifest("ns.mine:TTS") is None
+    assert plugins.find_manifest("ns.missing:TTS") is None
