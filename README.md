@@ -115,6 +115,26 @@ the server did not register is rejected with a `session_error` naming both sets.
 
 `scripts/install_local.sh --help` lists every flag.
 
+## Docker images
+
+`deploy/Dockerfile.{base,nvidia,amd}` build one image per hardware target (the
+Helm values pick them per worker group). Each installs its hardware's heavy
+dependencies from the requirement files, then `deploy/install_huri.sh` installs
+huri-core and every package under `packages/` (all curated events and modules:
+the head node imports each enabled module to build the app) and **fails the
+build** if a module or event does not load or the versions do not satisfy the
+modules' manifests.
+
+```sh
+docker build -f deploy/Dockerfile.base -t huri:base .
+docker run --rm -p 8000:8000 -e HURI_MODULES=tag,qag huri:base \
+  python -c "import ray; from ray import serve; from huri_core.app import build_app; ray.init(); serve.start(http_options={'host': '0.0.0.0'}); serve.run(build_app(), name='HuRI', blocking=True)"
+python deploy/smoke_session.py ws://127.0.0.1:8000/session   # a real session, no model needed
+```
+
+CI (`.github/workflows/docker.yml`) does exactly this on pull requests; the GPU
+images are built on demand (`workflow_dispatch`).
+
 ## Local install (single machine, no Kubernetes)
 
 `scripts/install_local.sh` is the bare-metal counterpart of the Docker images in
