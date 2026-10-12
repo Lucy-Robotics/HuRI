@@ -2,11 +2,11 @@ import asyncio
 import logging
 
 import numpy as np
+from huri_events.question import RAGQuestion
+from huri_events.speech import Transcript
 
 from huri_core.core.client import HuRIClient
 from huri_core.core.events import BytesEvent
-from huri_core.modules.rag.events import RAGQuestion
-from huri_core.modules.speech_to_text.events import Transcript
 
 logger = logging.getLogger("huri_cli")
 

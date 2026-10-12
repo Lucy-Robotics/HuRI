@@ -59,7 +59,8 @@ dev = [
 Repository = "https://github.com/Lucy-Robotics/HuRI"
 
 # Plugin registration (see huri_core/core/plugins.py). An installed package
-# adds modules and events the same way, from its own pyproject.toml.
+# adds modules and events the same way, from its own pyproject.toml; the
+# curated events are registered by huri-events (packages/huri-events).
 [project.entry-points."huri.modules"]
 vad = "huri_core.modules.speech_to_text.microphone_vad:VAD"
 stt = "huri_core.modules.speech_to_text.speech_to_text:STT"
@@ -70,17 +71,6 @@ qag = "huri_core.modules.rag.question_aggregator:QAG"
 rag = "huri_core.modules.rag.rag:RAG"
 tts = "huri_core.modules.text_to_speech.text_to_speech:TTS"
 mov = "huri_core.modules.gesture.gesture:MOV"
-
-[project.entry-points."huri.events"]
-"huri.audio.in" = "huri_core.core.events:BytesEvent"  # inbound mic frames (raw int16 PCM)
-"huri.audio.out" = "huri_core.modules.text_to_speech.events:Audio"
-"huri.voice" = "huri_core.modules.speech_to_text.events:Voice"
-"huri.transcript" = "huri_core.modules.speech_to_text.events:Transcript"
-"huri.emotion" = "huri_core.modules.emotion.events:Emotion"
-"huri.partial_question" = "huri_core.modules.rag.events:PartialQuestion"
-"huri.question" = "huri_core.modules.rag.events:RAGQuestion"
-"huri.token" = "huri_core.modules.text_to_speech.events:Token"
-"huri.motion" = "huri_core.modules.gesture.events:Motion"
 
 [tool.setuptools.dynamic]
 # Single source of truth: huri_core/__init__.py. See RELEASING.md.
@@ -121,7 +111,7 @@ exclude = [
 ]
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
-# The reference CLI is a separate package (examples/cli); its tests import it.
-pythonpath = ["examples/cli"]
+testpaths = ["tests", "packages/huri-events/tests"]
+# Separate distributions living in this repo (packages/*, examples/cli).
+pythonpath = ["packages/huri-events", "examples/cli"]
 python_files = ["test_*.py"]

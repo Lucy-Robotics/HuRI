@@ -4,12 +4,11 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import AsyncGenerator, List
 
 import numpy as np
+from huri_events.speech import Transcript, Voice
 from ray import serve
 from ray.serve import handle
 
 from huri_core.core.module import ModuleWithHandle
-
-from .events import Transcript, Voice
 
 _MODEL_PATH = os.environ.get("HURI_STT_MODEL_PATH", "base")
 _NUM_WORKERS = int(os.environ.get("HURI_STT_NUM_WORKERS", "2"))

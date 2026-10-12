@@ -1,22 +1,16 @@
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Mapping, Optional
 
+from huri_events.emotion import Emotion
+from huri_events.speech import Transcript
+
 from huri_core.core.events import JsonEvent
-from huri_core.modules.emotion.events import Emotion
-from huri_core.modules.speech_to_text.events import Transcript
-
-
-@dataclass
-class RAGResult(JsonEvent):
-    """What RAGHandle returns."""
-
-    answer: str
-    sources: list[dict] = field(default_factory=list)
 
 
 @dataclass
 class PartialQuestion(JsonEvent):
-    """Partial question used to aggregate a sentence to an emotion."""
+    """Partial question used to aggregate a sentence to an emotion: either
+    part may be missing (TAG sends the transcript, EAG the emotion)."""
 
     transcript: Optional[Transcript]
     emotion: Optional[Emotion]
@@ -24,7 +18,11 @@ class PartialQuestion(JsonEvent):
 
 @dataclass
 class RAGQuestion(JsonEvent):
-    """Fully aggregated question to send to the RAG."""
+    """Fully aggregated question to send to the RAG.
+
+    Wire: JSON ``{"transcript": {"text", "end"}, "emotion": {...} | null}``,
+    or the shorthand ``{"text": str}`` a client sends for a typed question.
+    """
 
     transcript: Transcript
     emotion: Optional[Emotion] = None

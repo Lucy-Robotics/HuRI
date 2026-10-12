@@ -37,4 +37,6 @@ COPY huri_core /app/huri_core
 # from a copy the build user owns: pip builds a local project in place.
 COPY --chown=ray pyproject.toml README.md LICENSE /tmp/huri-src/
 COPY --chown=ray huri_core /tmp/huri-src/huri_core
-RUN pip install --no-cache-dir --no-deps /tmp/huri-src && rm -rf /tmp/huri-src
+COPY --chown=ray packages/huri-events /tmp/huri-src/packages/huri-events
+RUN pip install --no-cache-dir --no-deps /tmp/huri-src /tmp/huri-src/packages/huri-events \
+ && rm -rf /tmp/huri-src

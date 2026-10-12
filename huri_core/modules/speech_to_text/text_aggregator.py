@@ -1,10 +1,10 @@
 import re
 from typing import Optional
 
-from huri_core.core.module import Module
-from huri_core.modules.rag.events import PartialQuestion
+from huri_events.question import PartialQuestion
+from huri_events.speech import Transcript
 
-from .events import Transcript
+from huri_core.core.module import Module
 
 
 class TAG(Module):

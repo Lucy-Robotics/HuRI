@@ -29,9 +29,8 @@ import traceback
 from typing import AsyncGenerator, Dict, List
 
 import numpy as np
+from huri_events.audio import Audio
 from ray import serve
-
-from .events import Audio
 
 _VOICE_PATH = os.environ.get(
     "HURI_PIPER_VOICE", "assets/models/piper/en_US-lessac-medium.onnx"

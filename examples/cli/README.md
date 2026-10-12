@@ -7,7 +7,7 @@ outside the core package on purpose — use it as a starting point for your own
 client.
 
 ```sh
-pip install -e examples/cli          # from the repo root, next to huri-core
+pip install -e packages/huri-events -e examples/cli   # from the repo root, next to huri-core
 huri-cli --config config/client_full.yaml
 huri-cli --config config/client_text.yaml --log-level DEBUG --log-file cli.log
 ```

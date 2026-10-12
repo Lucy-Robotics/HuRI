@@ -3,12 +3,12 @@ import os
 from typing import AsyncGenerator, Optional
 
 import numpy as np
+from huri_events.audio import Audio
+from huri_events.motion import Motion
 from ray import serve
 from ray.serve import handle
 
 from huri_core.core.module import ModuleWithHandle
-from huri_core.modules.gesture.events import Motion
-from huri_core.modules.text_to_speech.events import Audio
 
 _HF_REPO = os.environ.get("HURI_EMAGE_REPO", "H-Liu1997/emage_audio")
 _EMAGE_SR = 16000  # EMAGE expects 16 kHz mono audio

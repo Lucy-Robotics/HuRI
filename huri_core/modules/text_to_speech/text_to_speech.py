@@ -7,12 +7,12 @@ import uuid
 from typing import Any, AsyncGenerator, Optional
 
 import numpy as np
+from huri_events.audio import Audio
+from huri_events.text import Token
 from ray import serve
 from ray.serve import handle
 
 from huri_core.core.module import ModuleWithHandle
-
-from .events import Audio, Token
 
 # Defaults — overridden by env vars in production (see README.md)
 _MODEL_PATH = os.environ.get(

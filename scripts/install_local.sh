@@ -1412,6 +1412,8 @@ install_python_deps() {
   # which is how the server finds them.
   info "  huri-core (editable)"
   run "$PIP" install "${C[@]}" --no-deps -e "$REPO_ROOT"
+  # The curated events (huri.* topics), a separate distribution.
+  run "$PIP" install "${C[@]}" --no-deps -e "$REPO_ROOT/packages/huri-events"
   # The reference CLI client (huri-cli); its deps are in requirements.txt.
   run "$PIP" install "${C[@]}" --no-deps -e "$REPO_ROOT/examples/cli"
 

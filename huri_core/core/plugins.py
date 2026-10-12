@@ -30,9 +30,8 @@ MODULES_GROUP = "huri.modules"
 EVENTS_GROUP = "huri.events"
 
 CURATED_NAMESPACE = "huri"
-# Distributions allowed to register `huri.*` topics: the curated events live in
-# huri-core until they move to their own huri-events package.
-CURATED_DISTRIBUTIONS = frozenset({"huri-core", "huri-events"})
+# The only distribution allowed to register `huri.*` topics.
+CURATED_DISTRIBUTIONS = frozenset({"huri-events"})
 _TOPIC = re.compile(r"^[a-z0-9_-]+(\.[a-z0-9_-]+)+$")
 
 

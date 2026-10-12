@@ -11,11 +11,11 @@ import websockets
 from huri_cli.audio import AudioPlayer
 from huri_cli.main import RECEIVERS, SENDERS, build_client, run
 from huri_cli.viewer import MotionViewer, part_activity
+from huri_events.audio import Audio
+from huri_events.motion import Motion
 from omegaconf import OmegaConf
 
 from huri_core.core.dataclasses.config import ClientConfig
-from huri_core.modules.gesture.events import Motion
-from huri_core.modules.text_to_speech.events import Audio
 
 ROOT = Path(__file__).resolve().parents[2]
 CONFIGS = sorted(

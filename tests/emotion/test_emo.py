@@ -1,8 +1,8 @@
 import asyncio
 
 import numpy as np
+from huri_events.speech import Voice
 
-from huri_core.modules.speech_to_text.events import Voice
 from huri_core.testing import LocalHandle, ModuleHarness
 
 

@@ -1,10 +1,10 @@
 from typing import Optional
 
-from huri_core.core.module import Module
-from huri_core.modules.emotion.events import Emotion
-from huri_core.modules.speech_to_text.events import Transcript
+from huri_events.emotion import Emotion
+from huri_events.question import PartialQuestion, RAGQuestion
+from huri_events.speech import Transcript
 
-from .events import PartialQuestion, RAGQuestion
+from huri_core.core.module import Module
 
 
 class QAG(Module):

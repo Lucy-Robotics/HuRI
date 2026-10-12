@@ -276,8 +276,9 @@ client never installs Ray or FastAPI:
 
 ```sh
 pip install "huri-core[client] @ git+https://github.com/Lucy-Robotics/HuRI.git"   # client SDK only
+pip install "huri-events @ git+https://github.com/Lucy-Robotics/HuRI.git#subdirectory=packages/huri-events"   # the curated events
 pip install -e examples/cli                                                        # + the reference CLI (huri-cli)
-pip install -c constraints.txt -e ".[modules,dev]"                                 # server + curated modules
+pip install -c constraints.txt -e ".[modules,dev]" -e packages/huri-events        # server + curated modules and events
 ```
 
 `[server]` is Ray Serve + FastAPI and the pins that keep them working;
@@ -322,6 +323,9 @@ See `tests/speech_to_text/test_stt_tag.py` and `tests/core/test_testing.py`.
 - **huri_core/core** — `huri` (ingress + per-session router), `bus` (event graph),
   `client` (the client SDK, `HuRIClient`), `module`, `session`, `events`, `plugins` (module and
   event discovery), `user_config`, `dataclasses/config`
+- **packages/huri-events** — `huri-events`, the curated event classes (one per
+  `huri.*` topic, with its wire format): a separate, light distribution
+  (huri-core + numpy) that clients install to decode the topics
 - **examples/cli** — `huri-cli`, the reference command-line client: a separate
   package built on the client SDK (microphone and prompt in; text, speech and a
   gesture view out)
@@ -356,7 +360,8 @@ servo = "huri_servo.module:Servo"          # usable as `name: servo`
 Event topics are namespaced, `<namespace>.<name>`. The curated topics are
 `huri.audio.in`, `huri.audio.out`, `huri.voice`, `huri.transcript`,
 `huri.emotion`, `huri.partial_question`, `huri.question`, `huri.token` and
-`huri.motion`; the `huri.` namespace is reserved for them. Any other package
+`huri.motion`, registered by `huri-events` (packages/huri-events), which owns
+the `huri.` namespace; core itself defines no concrete event. Any other package
 registers its topics under a single namespace of its own (`acme.*`), which no
 other package may use — so a replacement event (`acme.motion`) can live next to
 the curated one instead of overriding it.
@@ -378,9 +383,9 @@ handshake and the wire encoding, and calls your handlers.
 
 ```python
 from huri_core.core.client import HuRIClient
-from huri_core.modules.rag.events import RAGQuestion
-from huri_core.modules.speech_to_text.events import Transcript
-from huri_core.modules.text_to_speech.events import Token
+from huri_events.question import RAGQuestion
+from huri_events.speech import Transcript
+from huri_events.text import Token
 
 
 async def print_token(token: Token) -> None:

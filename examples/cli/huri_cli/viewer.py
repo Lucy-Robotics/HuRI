@@ -12,8 +12,7 @@ import os
 from typing import Dict, List, Optional, Sequence
 
 import numpy as np
-
-from huri_core.modules.gesture.events import Motion
+from huri_events.motion import Motion
 
 logger = logging.getLogger("huri_cli.motion")
 

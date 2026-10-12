@@ -6,9 +6,8 @@ from datetime import datetime
 from typing import Any, Callable, List, Optional
 
 import numpy as np
+from huri_events.audio import Audio
 from scipy.signal import resample
-
-from huri_core.modules.text_to_speech.events import Audio
 
 logger = logging.getLogger("huri_cli.audio")
 

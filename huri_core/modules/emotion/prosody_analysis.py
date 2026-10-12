@@ -3,13 +3,12 @@ import os
 from typing import Any, AsyncGenerator, Dict, List
 
 import numpy as np
+from huri_events.emotion import Emotion
+from huri_events.speech import Voice
 from ray import serve
 from ray.serve import handle
 
 from huri_core.core.module import ModuleWithHandle
-from huri_core.modules.speech_to_text.events import Voice
-
-from .events import Emotion
 
 _MODEL_NAME = os.environ.get("HURI_EMO_MODEL", "superb/hubert-large-superb-er")
 

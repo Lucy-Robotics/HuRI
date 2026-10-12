@@ -1,10 +1,10 @@
 from collections import defaultdict
 from typing import Dict, Optional
 
-from huri_core.core.module import Module
-from huri_core.modules.rag.events import PartialQuestion
+from huri_events.emotion import Emotion
+from huri_events.question import PartialQuestion
 
-from .events import Emotion
+from huri_core.core.module import Module
 
 
 class EAG(Module):

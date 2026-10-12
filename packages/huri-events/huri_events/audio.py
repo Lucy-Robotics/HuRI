@@ -4,19 +4,19 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from huri_core.core.events import EventData, JsonEvent
+from huri_core.core.events import EventData
 
 logger = logging.getLogger("ray.serve")
 
 
 @dataclass
-class Token(JsonEvent):
-    text: str
-    end: bool
-
-
-@dataclass
 class Audio(EventData[bytes]):
+    """Synthesized speech: float32 mono samples.
+
+    Wire (binary): ``>IBd`` header — sample_rate (u32), end (u8), pts (f64,
+    seconds from utterance start) — then the float32 samples.
+    """
+
     data: np.ndarray
     sample_rate: int
     end: bool = False

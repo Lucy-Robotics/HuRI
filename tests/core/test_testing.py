@@ -139,10 +139,11 @@ def test_local_handle_reports_a_method_the_fake_lacks():
 
 
 def test_a_real_streaming_module_runs_on_a_fake_deployment():
-    from huri_core.modules.rag.events import RAGQuestion
+    from huri_events.question import RAGQuestion
+    from huri_events.speech import Transcript
+    from huri_events.text import Token
+
     from huri_core.modules.rag.rag import RAG
-    from huri_core.modules.speech_to_text.events import Transcript
-    from huri_core.modules.text_to_speech.events import Token
 
     class FakeRAGHandle:
         async def stream(self, query):

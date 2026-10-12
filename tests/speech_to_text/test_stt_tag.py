@@ -2,8 +2,8 @@ import asyncio
 
 import numpy as np
 import pytest
+from huri_events.speech import Transcript, Voice
 
-from huri_core.modules.speech_to_text.events import Transcript, Voice
 from huri_core.modules.speech_to_text.text_aggregator import TAG
 from huri_core.testing import LocalHandle, ModuleHarness
 

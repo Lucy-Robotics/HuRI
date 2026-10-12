@@ -213,6 +213,14 @@ def test_unknown_module_is_not_reported_as_disabled():
 # --- topic namespaces ----------------------------------------------------------
 
 
+def test_core_itself_cannot_register_a_curated_topic(installed):
+    installed[plugins.EVENTS_GROUP].append(
+        FakeEntryPoint("huri.motion", ToyEvent, dist="huri-core")
+    )
+    with pytest.raises(plugins.PluginError, match="reserved"):
+        plugins.load_events()
+
+
 def test_third_party_cannot_register_a_curated_topic(installed):
     installed[plugins.EVENTS_GROUP].append(
         FakeEntryPoint("huri.motion", ToyEvent, dist="acme-events")
@@ -221,7 +229,7 @@ def test_third_party_cannot_register_a_curated_topic(installed):
         plugins.load_events()
 
 
-@pytest.mark.parametrize("dist", ["huri-core", "huri-events", "huri_events"])
+@pytest.mark.parametrize("dist", ["huri-events", "huri_events", "Huri.Events"])
 def test_curated_distributions_own_the_huri_namespace(installed, dist):
     installed[plugins.EVENTS_GROUP].append(
         FakeEntryPoint("huri.motion", ToyEvent, dist=dist)
@@ -256,7 +264,7 @@ def test_two_packages_cannot_share_a_namespace(installed):
 
 def test_replacement_event_coexists_with_the_curated_one(installed):
     installed[plugins.EVENTS_GROUP] += [
-        FakeEntryPoint("huri.motion", ToyEvent, dist="huri-core"),
+        FakeEntryPoint("huri.motion", ToyEvent, dist="huri-events"),
         FakeEntryPoint("acme.motion", OtherToyEvent, dist="acme"),
     ]
     assert plugins.load_events() == {

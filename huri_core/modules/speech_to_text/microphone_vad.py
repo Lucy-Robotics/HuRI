@@ -2,11 +2,10 @@ from typing import Optional
 
 import numpy as np
 import webrtcvad
+from huri_events.speech import Voice
 
 from huri_core.core.events import BytesEvent
 from huri_core.core.module import Module
-
-from .events import Voice
 
 
 class VAD(Module):

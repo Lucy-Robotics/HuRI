@@ -8,6 +8,8 @@ from datetime import datetime
 from typing import Any, AsyncGenerator
 
 import httpx
+from huri_events.question import RAGQuestion
+from huri_events.text import Token
 from pydantic import BaseModel
 from qdrant_client.models import (
     FieldCondition,
@@ -20,9 +22,7 @@ from ray import serve
 from ray.serve import handle
 
 from huri_core.core.module import ModuleWithHandle, ModuleWithId
-from huri_core.modules.text_to_speech.events import Token
 
-from .events import RAGQuestion
 from .qdrant_utils import make_qdrant_client
 
 _RETRIABLE_EXC = (

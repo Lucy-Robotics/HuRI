@@ -18,6 +18,12 @@ logger = logging.getLogger("ray.serve")
 
 @dataclass
 class Motion(EventData[bytes]):
+    """SMPL-X gesture frames paired with the speech (`pts` matches Audio.pts).
+
+    Wire (binary): ``>dII`` header — pts (f64), fps (u32), frame count (u32) —
+    then float32 poses (t x 165), expressions (t x 100) and trans (t x 3).
+    """
+
     poses: np.ndarray  # (t, 165)  SMPL-X axis-angle, 55 joints × 3
     expressions: np.ndarray  # (t, 100)  facial expression coefficients
     trans: np.ndarray  # (t, 3)    global root translation

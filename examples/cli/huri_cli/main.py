@@ -16,6 +16,11 @@ import asyncio
 import logging
 from typing import Any, Awaitable, Callable, Dict, List, Mapping, Optional, Tuple, Type
 
+from huri_events.audio import Audio
+from huri_events.motion import Motion
+from huri_events.question import RAGQuestion
+from huri_events.text import Token
+
 from huri_core.core.client import (
     HuRIClient,
     HuRISessionError,
@@ -23,9 +28,6 @@ from huri_core.core.client import (
 )
 from huri_core.core.dataclasses.config import ClientConfig
 from huri_core.core.events import EventData
-from huri_core.modules.gesture.events import Motion
-from huri_core.modules.rag.events import RAGQuestion
-from huri_core.modules.text_to_speech.events import Audio, Token
 
 from .audio import AudioPlayer
 from .senders import send_microphone, send_prompt

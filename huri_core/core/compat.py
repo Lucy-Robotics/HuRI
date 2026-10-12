@@ -36,7 +36,7 @@ def missing_package_hint(topic: str) -> str:
 
     namespace = topic_namespace(topic)
     if namespace == CURATED_NAMESPACE:
-        return "the curated events (huri-events; provided by huri-core for now)"
+        return "huri-events (the curated events)"
     return f"the event package of the {namespace!r} namespace"
 
 
