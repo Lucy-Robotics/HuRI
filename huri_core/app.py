@@ -3,7 +3,7 @@ import os
 
 from ray.serve import Application
 
-from huri_core.core.compat import check_manifests, check_modules
+from huri_core.core.compat import check_actuation, check_manifests, check_modules
 from huri_core.core.factory import bind_deployment_handles
 from huri_core.core.huri import HuRI
 from huri_core.core.plugins import (
@@ -41,6 +41,22 @@ def build_app() -> Application:
         if manifest is not None:
             manifests[name] = manifest
     check_manifests(modules, manifests, events)
+    # Modules that can move hardware need their own, explicit opt-in.
+    opted_in = parse_selection(os.environ.get("HURI_ACTUATION_MODULES"))
+    actuating = check_actuation(modules, manifests, opted_in)
+    unused = sorted(set(opted_in) - set(actuating))
+    if unused:
+        logger.warning(
+            "[HuRI] HURI_ACTUATION_MODULES lists %s, which no enabled module "
+            "declaring actuation matches (typo, or not in HURI_MODULES?)",
+            unused,
+        )
+    if actuating:
+        logger.warning(
+            "[HuRI] ACTUATION ENABLED: %s can drive physical hardware "
+            "(opted in by HURI_ACTUATION_MODULES)",
+            actuating,
+        )
     handles = bind_deployment_handles(modules)
     app: Application = HuRI.bind(modules, handles, events)  # type: ignore[attr-defined]
     return app

@@ -28,12 +28,18 @@ class Module:
         Optional event classes the module expects on those topics. When set,
         the server refuses to start if the installed event package registers
         another class for the topic (a version mismatch).
+
+    :actuation:
+        True when the module can drive physical hardware (motors, servos...).
+        The server then only loads it if its operator also lists it in
+        HURI_ACTUATION_MODULES. Same as `requires.actuation` in a manifest.
     """
 
     input_type: str
     output_type: Optional[str]
     input_event: Optional[Type[EventData]] = None
     output_event: Optional[Type[EventData]] = None
+    actuation: bool = False
 
     def process(
         self, _

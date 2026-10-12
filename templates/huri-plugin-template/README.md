@@ -41,6 +41,13 @@ subscribe: [example.shout]
 
 A client decoding `example.shout` installs only `events/`.
 
+## When the module moves hardware
+
+Set `requires = { actuation = true }` in the manifest (and `actuation = True` on
+the class). The server then refuses to load it unless its operator lists it in
+`HURI_ACTUATION_MODULES` as well as `HURI_MODULES`; document the module's
+limits (ranges, rates) in this README.
+
 ## When the module needs a model
 
 Run the model as a Ray Serve deployment and make the module a

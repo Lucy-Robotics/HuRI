@@ -67,6 +67,12 @@ module, wired instead of the old one.
 
 Failures say which module, which topic, and which package is probably missing.
 
+**Actuation.** A module that can drive physical hardware declares it
+(`requires.actuation` in its manifest, or `actuation = True` on its class); the
+server will not start with it unless the operator also lists it in
+`HURI_ACTUATION_MODULES`. Enabling a module is not consenting to it moving a
+robot, and neither is a verified mark.
+
 ## A session
 
 The client sends a handshake — `user_id`, `modules`, the topics it will `send`

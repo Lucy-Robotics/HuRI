@@ -417,7 +417,14 @@ the curated one instead of overriding it.
 empty, the server enables no module and rejects every session, because any
 installed package can register one. List each module explicitly
 (`HURI_MODULES=vad,stt,tag,qag,rag`); the installer and the shipped serve
-configs do. A module that is not packaged at all can be tried by import path:
+configs do.
+
+A module that can **move hardware** declares it (`requires.actuation = true` in
+its manifest, or `actuation = True` on its class), and the server refuses to
+start with it enabled unless its operator also lists it in
+`HURI_ACTUATION_MODULES` — a separate, explicit consent, independent of
+`HURI_MODULES` and of any verified mark. Active actuation modules are logged as
+a warning at startup. A module that is not packaged at all can be tried by import path:
 list it in `HURI_MODULES` (`HURI_MODULES=stt,my_pkg.servo:Servo`) and reference
 it from the client config with `module: my_pkg.servo:Servo` instead of `name:`.
 A client can never make the server import a path the server did not list.

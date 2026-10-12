@@ -173,3 +173,44 @@ def check_manifests(
                 problems.append(f"{where} needs {raw}, but {got} is installed")
     if problems:
         raise CompatibilityError(problems)
+
+
+def actuating_modules(
+    modules: Dict[str, Type[Module]], manifests: Dict[str, ModuleManifest]
+) -> List[str]:
+    """Modules declaring they can drive hardware: `actuation = True` on the
+    class, or `requires.actuation = true` in the manifest."""
+
+    return sorted(
+        name
+        for name, cls in modules.items()
+        if cls.actuation or (name in manifests and manifests[name].actuation)
+    )
+
+
+def check_actuation(
+    modules: Dict[str, Type[Module]],
+    manifests: Dict[str, ModuleManifest],
+    opted_in: Iterable[str],
+) -> List[str]:
+    """Refuse to load an actuation module its operator did not opt in to.
+
+    :opted_in: the HURI_ACTUATION_MODULES list, separate from HURI_MODULES
+        and from any verified mark: enabling a module is not consenting to it
+        moving hardware.
+    Returns the actuation modules that will run.
+    """
+
+    actuating = actuating_modules(modules, manifests)
+    allowed = set(opted_in)
+    missing = [name for name in actuating if name not in allowed]
+    if missing:
+        raise CompatibilityError(
+            [
+                f"module {name!r} can drive physical hardware (actuation): the "
+                "server's operator must opt in explicitly by listing it in "
+                "HURI_ACTUATION_MODULES, in addition to HURI_MODULES"
+                for name in missing
+            ]
+        )
+    return actuating
