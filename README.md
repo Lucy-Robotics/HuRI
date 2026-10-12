@@ -278,7 +278,7 @@ client never installs Ray or FastAPI:
 pip install "huri-core[client] @ git+https://github.com/Lucy-Robotics/HuRI.git@dev"   # client SDK only
 pip install "huri-events @ git+https://github.com/Lucy-Robotics/HuRI.git@dev#subdirectory=packages/huri-events"   # the curated events
 pip install -e examples/cli                                                        # + the reference CLI (huri-cli)
-pip install -c constraints.txt -e ".[server,tts,dev]"                              # server (+ TTS, still in core)
+pip install -c constraints.txt -e ".[server,dev]"                                  # server
 for p in packages/*/; do pip install -c constraints.txt -e "$p"; done              # curated events and modules
 ```
 
