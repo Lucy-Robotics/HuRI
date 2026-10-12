@@ -80,15 +80,15 @@ tts = "huri_core.modules.text_to_speech.text_to_speech:TTS"
 mov = "huri_core.modules.gesture.gesture:MOV"
 
 [project.entry-points."huri.events"]
-"audio.in" = "huri_core.core.events:BytesEvent"  # inbound mic frames (raw int16 PCM)
-"audio.out" = "huri_core.modules.text_to_speech.events:Audio"
-"voice" = "huri_core.modules.speech_to_text.events:Voice"
-"transcript" = "huri_core.modules.speech_to_text.events:Transcript"
-"emotion" = "huri_core.modules.emotion.events:Emotion"
-"partial_question" = "huri_core.modules.rag.events:PartialQuestion"
-"question" = "huri_core.modules.rag.events:RAGQuestion"
-"token" = "huri_core.modules.text_to_speech.events:Token"
-"motion" = "huri_core.modules.gesture.events:Motion"
+"huri.audio.in" = "huri_core.core.events:BytesEvent"  # inbound mic frames (raw int16 PCM)
+"huri.audio.out" = "huri_core.modules.text_to_speech.events:Audio"
+"huri.voice" = "huri_core.modules.speech_to_text.events:Voice"
+"huri.transcript" = "huri_core.modules.speech_to_text.events:Transcript"
+"huri.emotion" = "huri_core.modules.emotion.events:Emotion"
+"huri.partial_question" = "huri_core.modules.rag.events:PartialQuestion"
+"huri.question" = "huri_core.modules.rag.events:RAGQuestion"
+"huri.token" = "huri_core.modules.text_to_speech.events:Token"
+"huri.motion" = "huri_core.modules.gesture.events:Motion"
 
 [tool.setuptools.dynamic]
 # Single source of truth: huri_core/__init__.py. See RELEASING.md.

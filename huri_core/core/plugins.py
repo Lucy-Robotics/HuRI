@@ -6,14 +6,20 @@ A package registers what it provides in its pyproject.toml:
     stt = "huri_stt.module:STT"
 
     [project.entry-points."huri.events"]
-    "transcript" = "huri_events.text:Transcript"
+    "huri.transcript" = "huri_events.text:Transcript"
 
 so installing it with pip is all it takes for HuRI to find it. A module can also
 be referenced by import path (`my_pkg.servo:Servo`) without any packaging, as
 long as the server's HURI_MODULES lists that path.
+
+Event topics are namespaced, `<namespace>.<name>`. `huri.` is reserved for the
+curated events; every other distribution registers its topics under one
+namespace of its own (`acme.servo_angles`), so a third-party event can replace
+a curated one without colliding with it.
 """
 
 import importlib
+import re
 from importlib.metadata import EntryPoint, entry_points
 from typing import Any, Dict, Iterable, List, Optional, Type
 
@@ -23,6 +29,12 @@ from .module import Module
 MODULES_GROUP = "huri.modules"
 EVENTS_GROUP = "huri.events"
 
+CURATED_NAMESPACE = "huri"
+# Distributions allowed to register `huri.*` topics: the curated events live in
+# huri-core until they move to their own huri-events package.
+CURATED_DISTRIBUTIONS = frozenset({"huri-core", "huri-events"})
+_TOPIC = re.compile(r"^[a-z0-9_-]+(\.[a-z0-9_-]+)+$")
+
 
 class PluginError(RuntimeError):
     """A plugin is missing, broken, or conflicts with another one."""
@@ -31,6 +43,51 @@ class PluginError(RuntimeError):
 def _dist(ep: EntryPoint) -> str:
     dist = getattr(ep, "dist", None)
     return dist.name if dist is not None else "<unknown distribution>"
+
+
+def _normalize(dist: str) -> str:
+    return re.sub(r"[-_.]+", "-", dist).lower()
+
+
+def topic_namespace(topic: str) -> str:
+    return topic.split(".", 1)[0]
+
+
+def _check_namespaces(eps: Iterable[EntryPoint]) -> None:
+    """One namespace per distribution, one distribution per namespace, and
+    `huri.` only for the curated events."""
+
+    owner: Dict[str, str] = {}  # namespace -> distribution
+    claimed: Dict[str, str] = {}  # distribution -> namespace
+    for ep in eps:
+        topic, dist = ep.name, _dist(ep)
+        if not _TOPIC.match(topic):
+            raise PluginError(
+                f"event topic {topic!r} (from {dist}) must be namespaced, "
+                "'<namespace>.<name>' in lowercase, e.g. 'acme.servo_angles'"
+            )
+        namespace = topic_namespace(topic)
+        if (
+            namespace == CURATED_NAMESPACE
+            and _normalize(dist) not in CURATED_DISTRIBUTIONS
+        ):
+            raise PluginError(
+                f"{dist} registers {topic!r}, but the {CURATED_NAMESPACE!r} "
+                "namespace is reserved for the curated events. Register it under "
+                f"your own namespace instead, e.g. "
+                f"'{_normalize(dist).replace('-', '_')}.{topic.split('.', 1)[1]}'"
+            )
+        if dist in claimed and claimed[dist] != namespace:
+            raise PluginError(
+                f"{dist} registers topics in two namespaces, {claimed[dist]!r} and "
+                f"{namespace!r} ({topic!r}): a package claims a single namespace"
+            )
+        if namespace in owner and owner[namespace] != dist:
+            raise PluginError(
+                f"namespace {namespace!r} is claimed by both {owner[namespace]} and "
+                f"{dist} ({topic!r}). Uninstall one of them."
+            )
+        claimed[dist], owner[namespace] = namespace, dist
 
 
 def _entry_points(group: str) -> Dict[str, EntryPoint]:
@@ -142,8 +199,10 @@ def load_modules(selection: Optional[Iterable[str]] = None) -> Dict[str, Type[Mo
 def load_events() -> Dict[str, Type[EventData]]:
     """Every installed event class, by topic."""
 
+    found = _entry_points(EVENTS_GROUP)
+    _check_namespaces(found.values())
     events: Dict[str, Type[EventData]] = {}
-    for topic, ep in _entry_points(EVENTS_GROUP).items():
+    for topic, ep in found.items():
         try:
             obj = ep.load()
         except Exception as e:

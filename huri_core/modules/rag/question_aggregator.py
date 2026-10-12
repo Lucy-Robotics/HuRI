@@ -12,15 +12,15 @@ class QAG(Module):
 
     Aggregate sentence and emotion into a RAGQuestion.
 
-    input: partial_question,
-    output: question
+    input: huri.partial_question,
+    output: huri.question
 
     :use_emotion: default True.
     Set to False if you do not analyze emotion or do not need it.
     """
 
-    input_type = "partial_question"
-    output_type = "question"
+    input_type = "huri.partial_question"
+    output_type = "huri.question"
 
     def __init__(self, use_emotion: bool = True):
         super().__init__()

@@ -6,13 +6,13 @@ interface_path: huri_core.interfaces.cli_interface:cli_interface
 senders:
   audio:
     name: audio
-    topic: audio.in
+    topic: huri.audio.in
     args:
       sample_rate: 16000
       frame_duration: 0.030
   text:
     name: text
-    topic: question
+    topic: huri.question
     args:
       sample_rate: 16000
       frame_duration: 0.030
@@ -20,13 +20,13 @@ senders:
 hooks:
   audio:
     name: audio
-    topics: [audio.out]
+    topics: [huri.audio.out]
     args:
       incoming_sample_rate: ${senders.audio.args.sample_rate}
       sample_rate: 44100
   motion:
     name: motion
-    topics: [motion]
+    topics: [huri.motion]
 
 modules:
   vad:

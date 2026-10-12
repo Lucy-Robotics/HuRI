@@ -326,8 +326,16 @@ images) and not just checked out.
 servo = "huri_servo.module:Servo"          # usable as `name: servo`
 
 [project.entry-points."huri.events"]
-"servo_angles" = "huri_servo.events:ServoAngles"
+"acme.servo_angles" = "huri_servo.events:ServoAngles"
 ```
+
+Event topics are namespaced, `<namespace>.<name>`. The curated topics are
+`huri.audio.in`, `huri.audio.out`, `huri.voice`, `huri.transcript`,
+`huri.emotion`, `huri.partial_question`, `huri.question`, `huri.token` and
+`huri.motion`; the `huri.` namespace is reserved for them. Any other package
+registers its topics under a single namespace of its own (`acme.*`), which no
+other package may use — so a replacement event (`acme.motion`) can live next to
+the curated one instead of overriding it.
 
 `HURI_MODULES` is the server's allow-list, and it is **default-deny**: unset or
 empty, the server enables no module and rejects every session, because any

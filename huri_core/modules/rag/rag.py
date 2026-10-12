@@ -809,13 +809,13 @@ class RAGHandle:
 class RAG(ModuleWithHandle, ModuleWithId):
     """RAG Module — streams LLM tokens.
 
-    input:  question (RAGQuestion)
-    output: token    (Token)
+    input:  huri.question (RAGQuestion)
+    output: huri.token    (Token)
     """
 
     _handle_cls = RAGHandle
-    input_type = "question"
-    output_type = "token"
+    input_type = "huri.question"
+    output_type = "huri.token"
 
     def __init__(
         self,

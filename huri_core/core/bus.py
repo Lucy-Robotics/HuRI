@@ -53,7 +53,7 @@ class EventGraph:
     async def publish(self, event_topic, data):
         subs = self.subscribers[event_topic]
 
-        if event_topic not in ("audio.in",):
+        if event_topic not in ("huri.audio.in",):
             logger.info(
                 "[GRAPH] publish topic=%r subscribers=%s",
                 event_topic,

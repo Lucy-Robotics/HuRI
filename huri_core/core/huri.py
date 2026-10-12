@@ -80,7 +80,7 @@ class HuRI:
 
         JSON message example:
             {
-                "topic": "text_in",
+                "topic": "huri.question",
                 "data": {...}
             }
 

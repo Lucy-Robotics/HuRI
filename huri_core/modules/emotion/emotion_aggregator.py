@@ -12,8 +12,8 @@ class EAG(Module):
 
     Aggregate all emotions and send when voice end.
 
-    input: emotion,
-    output: partial_question
+    input: huri.emotion,
+    output: huri.partial_question
 
     :ema_alpha: if not None, the aggragation will use ema computation instead
     of average. Recents emotion will have stronger impact on the final score.
@@ -21,8 +21,8 @@ class EAG(Module):
     Default alpha would be ~0.3.
     """
 
-    input_type = "emotion"
-    output_type = "partial_question"
+    input_type = "huri.emotion"
+    output_type = "huri.partial_question"
 
     def __init__(self, ema_alpha: Optional[float] = None):
         super().__init__()

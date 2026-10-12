@@ -14,8 +14,8 @@ class VAD(Module):
 
     Detect voice and silence using WebRTC VAD.
 
-    input: audio.in,
-    output: voice
+    input: huri.audio.in,
+    output: huri.voice
 
     :vad_agressiveness: from 0 (low) to 3 (high, can distord audio).
     :silence_duration: how many seconds will a no voice be considered a silence.
@@ -27,8 +27,8 @@ class VAD(Module):
     # Inbound microphone frames travel on their own topic so the TTS-output
     # "audio" topic (consumed by MOV and the client Sender) never collides
     # with mic input — otherwise raw mic bytes get echoed back to the client.
-    input_type = "audio.in"
-    output_type = "voice"
+    input_type = "huri.audio.in"
+    output_type = "huri.voice"
 
     def __init__(
         self,

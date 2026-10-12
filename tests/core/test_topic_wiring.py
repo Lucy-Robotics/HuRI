@@ -59,7 +59,10 @@ def test_pipeline_topics_are_connected():
     """Every module's input must be some other module's output (or an entrypoint)."""
     modules = load_modules(installed_modules())
     produced = {m.output_type for m in modules.values() if m.output_type}
-    entrypoints = {"audio.in", "question"}  # fed by the client, not by a module
+    entrypoints = {
+        "huri.audio.in",
+        "huri.question",
+    }  # fed by the client, not by a module
     dangling = {
         name: m.input_type
         for name, m in modules.items()
@@ -69,14 +72,16 @@ def test_pipeline_topics_are_connected():
 
 
 def test_unknown_hook_topic_is_rejected():
-    pipeline = [_Stub("token", "audio.out")]
-    with pytest.raises(ValueError, match="audio.out"):
+    pipeline = [_Stub("huri.token", "huri.audio.out")]
+    with pytest.raises(ValueError, match="huri.audio.out"):
         # the pre-rename name: must not silently produce a dead Sender
         HuRI._check_subscriptions(pipeline, ["audio"])
 
 
 def test_known_hook_topic_is_accepted():
-    HuRI._check_subscriptions([_Stub("token", "audio.out")], ["audio.out"])
+    HuRI._check_subscriptions(
+        [_Stub("huri.token", "huri.audio.out")], ["huri.audio.out"]
+    )
 
 
 def test_event_reaches_the_sender_for_its_topic():
@@ -84,21 +89,21 @@ def test_event_reaches_the_sender_for_its_topic():
     motion = _motion()
     session = Session(
         [
-            _Stub("token", "audio.out", emit=None),
-            _Stub("audio.out", "motion", emit=motion),
-            Sender(ws, "motion"),
+            _Stub("huri.token", "huri.audio.out", emit=None),
+            _Stub("huri.audio.out", "huri.motion", emit=motion),
+            Sender(ws, "huri.motion"),
         ]
     )
 
     async def run():
-        await session.publish("audio.out", object())
+        await session.publish("huri.audio.out", object())
         for _ in range(50):
             await asyncio.sleep(0.005)
             if ws.sent:
                 return
 
     asyncio.run(run())
-    assert [topic for topic, _ in ws.sent] == ["motion"]
+    assert [topic for topic, _ in ws.sent] == ["huri.motion"]
 
 
 def test_motion_survives_the_wire():

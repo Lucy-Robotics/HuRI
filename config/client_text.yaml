@@ -5,12 +5,12 @@ interface_path: huri_core.interfaces.cli_interface:cli_interface
 senders:
   text:
     name: text
-    topic: question
+    topic: huri.question
 
 hooks:
   token:
     name: token
-    topics: [token]
+    topics: [huri.token]
 
 modules:
   rag:

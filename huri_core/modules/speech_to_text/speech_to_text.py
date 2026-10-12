@@ -94,8 +94,8 @@ class STT(ModuleWithHandle):
     transcription to a handle-backed STTHandle, so the Whisper model runs
     off the HuRI master node.
 
-    input: voice,
-    output: transcript
+    input: huri.voice,
+    output: huri.transcript
 
     :language: language spoken in the audio. It should be a language code such
         as "en" or "fr".
@@ -106,8 +106,8 @@ class STT(ModuleWithHandle):
     """
 
     _handle_cls = STTHandle
-    input_type = "voice"
-    output_type = "transcript"
+    input_type = "huri.voice"
+    output_type = "huri.transcript"
 
     def __init__(
         self,

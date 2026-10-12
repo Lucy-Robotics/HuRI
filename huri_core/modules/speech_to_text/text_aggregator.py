@@ -16,16 +16,16 @@ class TAG(Module):
     transcript repeats the end of the previous one (with possibly different
     casing or punctuation). Transcripts are stitched together on that overlap.
 
-    input: transcript,
-    output: partial_question
+    input: huri.transcript,
+    output: huri.partial_question
 
     :min_prefix: shortest word fragment (in characters) that may match a longer
         word when merging overlapping transcripts, e.g. "weath" and "weather".
         Guards against 1-2 letter fragments matching unrelated words.
     """
 
-    input_type = "transcript"
-    output_type = "partial_question"
+    input_type = "huri.transcript"
+    output_type = "huri.partial_question"
 
     def __init__(
         self,

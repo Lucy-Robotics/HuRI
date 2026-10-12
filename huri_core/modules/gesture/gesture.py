@@ -287,7 +287,7 @@ class MOV(ModuleWithHandle):
     of teleporting.
 
     input:  audio (Audio)
-    output: motion (Motion)
+    output: huri.motion (Motion)
 
     :hf_repo:      HuggingFace repository to load EMAGE weights from.
     :device:       PyTorch device string; defaults to CUDA when available.
@@ -297,8 +297,8 @@ class MOV(ModuleWithHandle):
     """
 
     _handle_cls = MOVHandle
-    input_type = "audio.out"
-    output_type = "motion"
+    input_type = "huri.audio.out"
+    output_type = "huri.motion"
 
     def __init__(
         self,

@@ -208,3 +208,58 @@ def test_unknown_module_is_not_reported_as_disabled():
     factory = ModuleFactory(handles={}, installed=["tag"])
     with pytest.raises(ValueError, match="Unknown module 'nope'"):
         factory.create("user", "nope")
+
+
+# --- topic namespaces ----------------------------------------------------------
+
+
+def test_third_party_cannot_register_a_curated_topic(installed):
+    installed[plugins.EVENTS_GROUP].append(
+        FakeEntryPoint("huri.motion", ToyEvent, dist="acme-events")
+    )
+    with pytest.raises(plugins.PluginError, match="reserved.*acme_events.motion"):
+        plugins.load_events()
+
+
+@pytest.mark.parametrize("dist", ["huri-core", "huri-events", "huri_events"])
+def test_curated_distributions_own_the_huri_namespace(installed, dist):
+    installed[plugins.EVENTS_GROUP].append(
+        FakeEntryPoint("huri.motion", ToyEvent, dist=dist)
+    )
+    assert plugins.load_events() == {"huri.motion": ToyEvent}
+
+
+@pytest.mark.parametrize("topic", ["motion", "Acme.motion", "acme.", ".motion"])
+def test_topic_must_be_namespaced(installed, topic):
+    installed[plugins.EVENTS_GROUP].append(FakeEntryPoint(topic, ToyEvent))
+    with pytest.raises(plugins.PluginError, match="namespaced"):
+        plugins.load_events()
+
+
+def test_a_package_claims_a_single_namespace(installed):
+    installed[plugins.EVENTS_GROUP] += [
+        FakeEntryPoint("acme.servo", ToyEvent, dist="acme"),
+        FakeEntryPoint("other.servo", OtherToyEvent, dist="acme"),
+    ]
+    with pytest.raises(plugins.PluginError, match="two namespaces"):
+        plugins.load_events()
+
+
+def test_two_packages_cannot_share_a_namespace(installed):
+    installed[plugins.EVENTS_GROUP] += [
+        FakeEntryPoint("acme.servo", ToyEvent, dist="acme"),
+        FakeEntryPoint("acme.lights", OtherToyEvent, dist="impostor"),
+    ]
+    with pytest.raises(plugins.PluginError, match="acme.*impostor"):
+        plugins.load_events()
+
+
+def test_replacement_event_coexists_with_the_curated_one(installed):
+    installed[plugins.EVENTS_GROUP] += [
+        FakeEntryPoint("huri.motion", ToyEvent, dist="huri-core"),
+        FakeEntryPoint("acme.motion", OtherToyEvent, dist="acme"),
+    ]
+    assert plugins.load_events() == {
+        "huri.motion": ToyEvent,
+        "acme.motion": OtherToyEvent,
+    }

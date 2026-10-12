@@ -2052,13 +2052,13 @@ EOF
     echo "senders:"
     echo "  audio:"
     echo "    name: audio"
-    echo "    topic: audio.in"
+    echo "    topic: huri.audio.in"
     echo "    args:"
     echo "      sample_rate: 16000"
     echo "      frame_duration: 0.030"
     echo "  text:"
     echo "    name: text"
-    echo "    topic: question"
+    echo "    topic: huri.question"
     echo "    args:"
     echo "      sample_rate: 16000"
     echo "      frame_duration: 0.030"
@@ -2066,11 +2066,11 @@ EOF
     echo "hooks:"
     echo "  token:"
     echo "    name: token"
-    echo "    topics: [token]"
+    echo "    topics: [huri.token]"
     if [[ "$P_TTS_DEV" != "off" ]]; then
       echo "  audio:"
       echo "    name: audio"
-      echo "    topics: [audio.out]"
+      echo "    topics: [huri.audio.out]"
       echo "    args:"
       echo "      incoming_sample_rate: \${senders.audio.args.sample_rate}"
       echo "      sample_rate: 44100"
@@ -2082,7 +2082,7 @@ EOF
     if [[ "$P_GES_DEV" != "off" ]]; then
       echo "  motion:"
       echo "    name: motion"
-      echo "    topics: [motion]"
+      echo "    topics: [huri.motion]"
     fi
     echo
     echo "modules:"

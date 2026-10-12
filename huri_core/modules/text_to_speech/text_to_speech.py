@@ -250,13 +250,13 @@ class TTS(ModuleWithHandle):
     No clause buffering on our side — CosyVoice's frontend handles segmentation
     and stitches LM calls together across the whole utterance.
 
-    input: token (Token)
+    input: huri.token (Token)
     output: audio (Audio)
     """
 
     _handle_cls = _select_engine()
-    input_type = "token"
-    output_type = "audio.out"
+    input_type = "huri.token"
+    output_type = "huri.audio.out"
 
     def __init__(self, _handle: handle.DeploymentHandle):
         super().__init__(_handle)

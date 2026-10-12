@@ -67,8 +67,8 @@ class EMO(ModuleWithHandle):
 
     Prosody Analysis of user voice speech.
 
-    input: voice,
-    output: emotion
+    input: huri.voice,
+    output: huri.emotion
 
     :sample_rate: size of received voice audio. Usually 8000, 16000 or 48000.
     :block_duration: size of received voice audio (in s).
@@ -76,8 +76,8 @@ class EMO(ModuleWithHandle):
     """
 
     _handle_cls = EMOHandle
-    input_type = "voice"
-    output_type = "emotion"
+    input_type = "huri.voice"
+    output_type = "huri.emotion"
 
     def __init__(
         self,
