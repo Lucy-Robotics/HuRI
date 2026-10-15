@@ -21,30 +21,81 @@ Public surface, i.e. what a breaking change is measured against:
 
 - the base classes modules and events derive from: `Module`,
   `ModuleWithHandle`, `ModuleWithId`, `EventData`, `JsonEvent`, `BytesEvent`;
+- the module test harness: `huri_core.testing` (`ModuleHarness`,
+  `LocalHandle`);
 - the client SDK and the client/server config schema (YAML keys);
-- the wire protocol: session handshake, JSON and binary framing, topic names;
-- the plugin entry point groups and the module manifest, once they exist.
+- the wire protocol: session handshake, JSON and binary framing, topic
+  namespaces;
+- the plugin entry point groups (`huri.modules`, `huri.events`), the
+  `HURI_MODULES` / `HURI_ACTUATION_MODULES` settings and the module manifest
+  (`huri_module.toml`);
+- the registry schema `huri hub` reads (`registry.toml` of huri-modules).
 
 Everything else (bus internals, factories, server wiring) is private and may
 change in any release.
 
 ## Who releases, and how
 
-Repository maintainers (admins of the `Lucy-Robotics/HuRI` repository) cut
-releases:
+Repository maintainers (admins of the `Lucy-Robotics/huri-core` repository)
+cut releases:
 
 1. Open a release PR on `dev` that sets `__version__` to the release version
    (drop the `.devN` suffix) and summarizes the changes.
 2. Merge it, then merge `dev` into `main` with a PR named `Release X.Y.Z`.
 3. Tag `main`'s merge commit `X.Y.Z` (no `v` prefix, like `0.2.0` and `0.3.0`)
-   and push the tag.
+   and push the tag. Publish a GitHub release for it: its notes are the
+   changelog, and they say what breaks for modules on a minor release.
 4. On `dev`, bump `__version__` to the next `X.(Y+1).0.dev0`.
+
+This repository was `Lucy-Robotics/HuRI` before the split; that name now
+belongs to the code-free showcase, so GitHub does not redirect it and install
+strings must use `Lucy-Robotics/huri-core`. The earlier tags came with the
+history; the first release as `huri-core` is `0.4.0`.
 
 ## Publishing
 
 Releases are git-only, there is no PyPI package to maintain:
 
 ```bash
-pip install "git+https://github.com/Lucy-Robotics/HuRI.git@0.4.0"
+pip install "huri-core[server] @ git+https://github.com/Lucy-Robotics/huri-core.git@0.4.0"
 python -c "import huri_core; print(huri_core.__version__)"
 ```
+
+`[client]` and `[dev]` install the same way.
+
+## huri-core and huri-modules
+
+[huri-modules](https://github.com/Lucy-Robotics/huri-modules) (the curated
+events, the curated modules, the registry and the install/deploy tooling) has
+its own semver and its own tags, also `X.Y.Z`. Each of its releases is a
+tested set built against one huri-core ref, the one in its `HURI_CORE_REF`
+file; its packages pin a huri-core minor range.
+
+| huri-modules | huri-core |
+| ------------ | --------- |
+| 0.1.x        | 0.4.x     |
+
+Once `0.4.0` is tagged here, huri-modules moves `HURI_CORE_REF` from `dev` to
+`0.4.0` and its packages' range from `>=0.4.0.dev0,<0.5` to `>=0.4,<0.5`.
+
+### How a breaking change propagates
+
+1. A change here breaks the public surface: it lands on `dev` and the next
+   release is a **minor** bump (`0.4` → `0.5`), with the break described in the
+   release notes.
+2. huri-modules' CI runs its tests against huri-core `dev` as a non-blocking
+   canary on every push, next to the blocking run against its pinned
+   `HURI_CORE_REF`. The canary turns red: the break is visible there before
+   anything is released, and before it reaches a user.
+3. Once huri-core `0.5.0` is tagged, huri-modules ports its packages, moves
+   their range (`huri-core>=0.5,<0.6`, bumping each package's own version),
+   points `HURI_CORE_REF` at `0.5.0`, and adds a row to the compatibility
+   table.
+4. huri-modules releases a new minor (`0.2.0`), the set that works with
+   huri-core `0.5.x`. Users of huri-core `0.4.x` keep using huri-modules
+   `0.1.x` (`HURI_MODULES_REF=0.1.0` for `huri hub`), whose ranges keep pip
+   from pairing it with the wrong core.
+
+Third-party modules follow the same path at their own pace: their
+`huri_core` range in `huri_module.toml` tells the server (at startup) and
+`huri hub` (when listing and installing) which huri-core they support.
