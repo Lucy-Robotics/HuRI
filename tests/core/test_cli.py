@@ -105,15 +105,29 @@ def test_a_target_that_is_not_callable_is_rejected(installed, capsys):
     assert "not callable" in capsys.readouterr().err
 
 
-def test_one_name_registered_twice_is_an_error(installed, capsys):
+def test_one_name_registered_twice_is_an_error_when_run(installed, capsys):
     installed += [
         FakeEntryPoint("hub", greet, dist="huri-hub"),
         FakeEntryPoint("hub", greet, dist="mallory-hub"),
     ]
-    assert cli.main(["greet"]) == 1
+    assert cli.main(["hub"]) == 1
     err = capsys.readouterr().err
     assert "registered twice" in err
     assert "huri-hub" in err and "mallory-hub" in err
+
+
+def test_a_conflict_does_not_take_the_other_commands_down(installed, capsys):
+    installed += [
+        FakeEntryPoint("greet", greet),
+        FakeEntryPoint("deploy", greet, dist="acme-deploy"),
+        FakeEntryPoint("deploy", greet, dist="other-deploy"),
+    ]
+    assert cli.main(["greet", "ada"]) == 0
+    assert capsys.readouterr().out == "hello ada\n"
+    assert cli.main(["--help"]) == 0
+    out = capsys.readouterr().out
+    assert "deploy  (registered twice, run it for details)" in out
+    assert "greet   Say hello to whoever is named." in out
 
 
 def test_the_same_target_twice_is_not_a_conflict(installed):

@@ -100,13 +100,17 @@ def _entry_points(group: str) -> Dict[str, EntryPoint]:
     for ep in entry_points(group=group):
         other = found.get(ep.name)
         if other is not None and other.value != ep.value:
-            raise PluginError(
-                f"{group} entry point {ep.name!r} is registered twice: "
-                f"{other.value} (from {_dist(other)}) and {ep.value} "
-                f"(from {_dist(ep)}). Uninstall one of them."
-            )
+            raise PluginError(_registered_twice(group, other, ep))
         found[ep.name] = ep
     return found
+
+
+def _registered_twice(group: str, first: EntryPoint, second: EntryPoint) -> str:
+    return (
+        f"{group} entry point {first.name!r} is registered twice: "
+        f"{first.value} (from {_dist(first)}) and {second.value} "
+        f"(from {_dist(second)}). Uninstall one of them."
+    )
 
 
 def is_import_path(name: str) -> bool:

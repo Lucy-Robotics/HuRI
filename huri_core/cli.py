@@ -15,9 +15,10 @@ the exit code (None counts as 0). The first line of its docstring is what
 import inspect
 import sys
 from importlib.metadata import EntryPoint
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
-from huri_core.core.plugins import PluginError, _dist, _entry_points
+from huri_core.core import plugins
+from huri_core.core.plugins import _dist, _registered_twice
 
 COMMANDS_GROUP = "huri.commands"
 
@@ -35,11 +36,20 @@ class CommandError(RuntimeError):
     """A command is unknown or cannot be loaded."""
 
 
-def installed_commands() -> Dict[str, EntryPoint]:
-    """Installed commands by name. The same name registered with two targets
-    is a PluginError, as for modules and events."""
+def scan_commands() -> Tuple[Dict[str, EntryPoint], Dict[str, str]]:
+    """Installed commands by name, and by name why each conflicting one cannot
+    run. The same name registered with two targets is refused, as for modules
+    and events, but only that name: `huri hub` still runs when two other
+    packages both claim `deploy`."""
 
-    return dict(sorted(_entry_points(COMMANDS_GROUP).items()))
+    found: Dict[str, EntryPoint] = {}
+    conflicts: Dict[str, str] = {}
+    for ep in plugins.entry_points(group=COMMANDS_GROUP):
+        other = found.setdefault(ep.name, ep)
+        if other.value != ep.value and ep.name not in conflicts:
+            conflicts[ep.name] = _registered_twice(COMMANDS_GROUP, other, ep)
+    commands = {n: ep for n, ep in found.items() if n not in conflicts}
+    return dict(sorted(commands.items())), dict(sorted(conflicts.items()))
 
 
 def load_command(ep: EntryPoint) -> Command:
@@ -70,13 +80,18 @@ def summary(ep: EntryPoint) -> str:
     return doc.strip().split("\n", 1)[0]
 
 
-def usage(commands: Dict[str, EntryPoint]) -> str:
+def usage(
+    commands: Dict[str, EntryPoint], conflicts: Optional[Dict[str, str]] = None
+) -> str:
+    conflicts = conflicts or {}
     lines = ["usage: huri <command> [args...]", ""]
-    if commands:
-        width = max(map(len, commands))
+    if commands or conflicts:
+        width = max(map(len, [*commands, *conflicts]))
         lines.append("installed commands:")
-        for name, ep in commands.items():
-            lines.append(f"  {name:<{width}}  {summary(ep)}".rstrip())
+        rows = {n: summary(ep) for n, ep in commands.items()}
+        rows.update((n, "(registered twice, run it for details)") for n in conflicts)
+        for name, text in sorted(rows.items()):
+            lines.append(f"  {name:<{width}}  {text}".rstrip())
     else:
         lines.append("no command is installed.")
     return "\n".join([*lines, "", WHERE])
@@ -84,18 +99,18 @@ def usage(commands: Dict[str, EntryPoint]) -> str:
 
 def main(argv: Optional[List[str]] = None) -> int:
     args = sys.argv[1:] if argv is None else list(argv)
-    try:
-        commands = installed_commands()
-    except PluginError as e:
-        print(f"huri: {e}", file=sys.stderr)
-        return 1
+    # A name registered twice is an error only when that name is run.
+    commands, conflicts = scan_commands()
 
     if not args or args[0] in ("-h", "--help"):
         # Asked for: on stdout, success. Missing command: on stderr, usage error.
-        print(usage(commands), file=sys.stdout if args else sys.stderr)
+        print(usage(commands, conflicts), file=sys.stdout if args else sys.stderr)
         return 0 if args else 2
 
     name, rest = args[0], args[1:]
+    if name in conflicts:
+        print(f"huri: {conflicts[name]}", file=sys.stderr)
+        return 1
     if name not in commands:
         installed = ", ".join(commands) or "none"
         print(
