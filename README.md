@@ -21,16 +21,18 @@ tested with none installed.
 
 ## Install
 
-huri-core is released as git tags, not on PyPI. Pick a ref: a release tag
-(`0.4.0`, ...) for anything you depend on, `dev` for the development branch.
-Python 3.10 to 3.12.
+huri-core is released on [PyPI](https://pypi.org/project/huri-core/) and as
+git tags (`X.Y.Z`), both from the same commit. Python 3.10 to 3.12.
 
 ```sh
 # A server: Ray Serve + FastAPI and the pins that keep them working.
-pip install "huri-core[server] @ git+https://github.com/Lucy-Robotics/huri-core.git@<ref>"
+pip install "huri-core[server]"
 
 # A client (robot, app): the client SDK, without Ray or FastAPI.
-pip install "huri-core[client] @ git+https://github.com/Lucy-Robotics/huri-core.git@<ref>"
+pip install "huri-core[client]"
+
+# The development branch, or any other ref, from git.
+pip install "huri-core[server] @ git+https://github.com/Lucy-Robotics/huri-core.git@dev"
 
 # Working on huri-core: every extra plus the lint/test toolchain.
 git clone https://github.com/Lucy-Robotics/huri-core.git && cd huri-core
@@ -42,9 +44,8 @@ The base install (no extra) has no dependency at all: the base classes and
 package.
 
 A **module author** depends on a huri-core range in the package's
-`pyproject.toml`, e.g. `"huri-core[server]>=0.4.0.dev0,<0.5"` (`>=0.4,<0.5`
-once `0.4.0` is tagged, see [Versioning](#versioning-and-compatibility)), and
-installs huri-core from git first since pip cannot find it on an index. Modules that use the
+`pyproject.toml`, e.g. `"huri-core[server]>=0.4,<0.5"` (see
+[Versioning](#versioning-and-compatibility)). Modules that use the
 curated `huri.*` topics also depend on `huri-events`, which lives in
 huri-modules:
 
@@ -207,7 +208,7 @@ input = { topic = "huri.motion", event = "huri_events.motion:Motion" }
 output = { topic = "acme.servo_angles", event = "huri_servo.events:ServoAngles" }  # omit for a terminal module
 events = ["huri-events>=0.1,<0.2"]               # optional
 requires = { gpu = false, actuation = false }    # optional
-huri_core = ">=0.4.0.dev0,<0.5"
+huri_core = ">=0.4,<0.5"
 ```
 
 (An unpackaged module's manifest sits next to its file, named after its class
@@ -365,7 +366,7 @@ my-echo/
 [project]
 name = "my-echo"
 version = "0.1.0"
-dependencies = ["huri-core>=0.4.0.dev0,<0.5"]
+dependencies = ["huri-core>=0.4,<0.5"]
 
 [project.entry-points."huri.modules"]
 shout = "my_echo:Shout"
@@ -447,9 +448,8 @@ huri-core follows semver with tags `X.Y.Z` (no `v` prefix); `dev` is the
 development branch, `main` the latest release. While huri-core is `0.x`, a
 **minor** release (`0.4` → `0.5`) may break the public surface and a patch
 release never does, so modules and event packages pin a minor range:
-`huri-core>=0.4,<0.5`. Until `0.4.0` is tagged, use `>=0.4.0.dev0,<0.5`: the
-only installable huri-core is `dev` (`0.4.0.dev0`), a pre-release below `0.4`
-that `>=0.4` excludes. The public surface (base classes, client SDK and
+`huri-core>=0.4,<0.5`. A `dev` build (`0.5.0.dev0`, ...) is a pre-release:
+`>=0.5` excludes it until `0.5.0` is tagged. The public surface (base classes, client SDK and
 session schema, wire protocol, entry point groups, manifest) is listed in
 [RELEASING.md](RELEASING.md).
 
