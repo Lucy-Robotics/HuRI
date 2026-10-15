@@ -28,10 +28,14 @@ Public surface, i.e. what a breaking change is measured against:
 - the client SDK and the client/server config schema (YAML keys);
 - the wire protocol: session handshake, JSON and binary framing, topic
   namespaces;
-- the plugin entry point groups (`huri.modules`, `huri.events`), the
-  `HURI_MODULES` / `HURI_ACTUATION_MODULES` settings and the module manifest
-  (`huri_module.toml`);
-- the registry schema `huri hub` reads (`registry.toml` of huri-modules).
+- the plugin entry point groups (`huri.modules`, `huri.events`,
+  `huri.commands`), the `HURI_MODULES` / `HURI_ACTUATION_MODULES` settings and
+  the module manifest (`huri_module.toml`);
+- the `huri` command: how it dispatches to `huri.commands` entry points and
+  the signature it calls them with (`main(argv: list[str]) -> int`).
+
+`huri hub` and the registry schema it reads are not huri-core's: both live in
+huri-modules (the `huri-hub` package) and follow its releases.
 
 Everything else (bus internals, factories, server wiring) is private and may
 change in any release.

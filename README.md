@@ -7,8 +7,9 @@ that runs, per client session, a pipeline of modules exchanging typed events.
 huri-core is **only the abstract framework**: the base classes modules and
 events derive from, the event bus and the sessions, the Ray Serve server, the
 plugin discovery and its safety checks, the client SDK, a module test harness
-and the `huri hub` command. It ships no module and no concrete event, and it is
-built and tested with none installed.
+and the `huri` command, which runs the subcommands installed packages provide.
+It ships no module, no concrete event and no command, and it is built and
+tested with none installed.
 
 | You want to...                                         | Go to                                                                                         |
 | ------------------------------------------------------ | --------------------------------------------------------------------------------------------- |
@@ -280,41 +281,33 @@ assert harness.run(Text("hello")) == [Text("hi")]
 
 ### Finding modules: `huri hub`
 
+`huri hub` (search GitHub for modules, list those supporting the installed
+huri-core, install a verified one) is not part of huri-core: it comes from the
+`huri-hub` package of
+[huri-modules](https://github.com/Lucy-Robotics/huri-modules), next to the
+registry it reads, and is documented there.
+
 ```sh
-huri hub search gesture             # GitHub repositories tagged `huri-module`
-huri hub list                       # modules supporting the installed huri-core
-huri hub list --verified            # only the curated registry of huri-modules
-huri hub list --core 0.5.0 --all    # another version; --all keeps unsupported ones
-huri hub install stt                # pip-installs a verified module (and huri-events); never enables it
-huri hub install servo --community  # an unreviewed one: only when asked explicitly
+pip install "huri-hub @ git+https://github.com/Lucy-Robotics/huri-modules.git@<ref>#subdirectory=packages/huri-hub"
+huri hub list
 ```
 
-`list` merges the verified registry with community modules, read from their
-`pyproject.toml` and `huri_module.toml` on GitHub without installing anything,
-and keeps those whose manifest supports the huri-core version. `install`
-refuses a module whose range excludes the installed huri-core, rather than let
-pip replace it. The curated packages modules depend on by name (`huri-events`,
-and for a curated module the curated libraries it needs, such as `huri-tts`)
-are on no package index: `install` passes them to pip in the same command,
-from huri-modules at the module's ref, so pip never looks them up elsewhere.
-Nothing found is ever loaded: enabling stays the operator's `HURI_MODULES`
-decision.
+### `huri` commands are plugins
 
-The registry is `registry.toml` of
-[huri-modules](https://github.com/Lucy-Robotics/huri-modules), read at the ref
-`HURI_MODULES_REF` (a huri-modules release tag such as `0.1.0`, or a branch;
-`main` by default), and its curated modules are installed from that same ref.
-Inside a huri-modules checkout (a directory with `registry.toml` and
-`check_registry.py`), that checkout's registry and packages are used instead.
-`--registry PATH|URL` or `HURI_REGISTRY` points at any other registry. For
-huri-modules' own registry on GitHub
-(`https://raw.githubusercontent.com/Lucy-Robotics/huri-modules/<ref>/registry.toml`)
-the curated packages come from that `<ref>`; for any other location, those
-missing from it come from huri-modules at `HURI_MODULES_REF` (the hub says
-so). `list` and `install` print the registry they read on stderr, and warn
-when a setting is ignored (`HURI_MODULES_REF` inside a checkout, the old
-`HURI_REF`). `GITHUB_TOKEN` raises GitHub's rate limit. `huri hub` needs
-`huri-core[client]`.
+`huri <name> [args...]` runs the `huri.commands` entry point called `<name>`,
+so a package adds a subcommand the way it adds a module:
+
+```toml
+[project.entry-points."huri.commands"]
+hub = "huri_hub.cli:main"
+```
+
+The target is called with the remaining arguments as a list and returns the
+exit code: `def main(argv: list[str]) -> int` (`None` counts as `0`). The first
+line of its docstring is what `huri --help` shows next to its name. Only the
+command run is imported; one that fails to import is reported with the
+distribution it comes from, and two distributions registering the same name
+for different targets is an error naming both.
 
 ## A minimal end to end example
 
@@ -453,5 +446,6 @@ Layout:
   session schema), `user_config`
 - `huri_core/app.py`, `huri_core/launch_huri.py` — the server entry points
 - `huri_core/testing.py` — `ModuleHarness`, `LocalHandle`
-- `huri_core/hub.py`, `huri_core/cli.py` — the `huri hub` command
+- `huri_core/cli.py` — the `huri` command, a dispatcher over the
+  `huri.commands` entry points
 - `tests/core/` — everything above, with toy modules and events only
