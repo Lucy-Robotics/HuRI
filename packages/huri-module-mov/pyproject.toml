@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=64,<82"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "huri-module-mov"
+version = "0.1.0"
+description = "HuRI module: Co-speech gestures (EMAGE): speech audio in, SMPL-X motion out"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "huri-core[server]>=0.4.0.dev0,<0.5",
+  "huri-events>=0.1,<0.2",
+  "numpy>=1.26,<2",
+  "torch",
+  "transformers>=4.46",
+  "librosa",
+  "omegaconf>=2.3,<2.4",
+]
+
+[project.entry-points."huri.modules"]
+mov = "huri_mov.module:MOV"
+
+[tool.setuptools.packages.find]
+include = ["huri_mov*"]
+
+[tool.setuptools.package-data]
+huri_mov = ["huri_module.toml", "manifests/*/huri_module.toml"]

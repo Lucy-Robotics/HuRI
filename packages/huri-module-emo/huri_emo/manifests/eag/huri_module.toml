@@ -1,0 +1,7 @@
+name = "eag"
+summary = "Aggregates emotion estimates over an utterance"
+input = { topic = "huri.emotion", event = "huri_events.emotion:Emotion" }
+output = { topic = "huri.partial_question", event = "huri_events.question:PartialQuestion" }
+events = ["huri-events>=0.1,<0.2"]
+requires = { gpu = false, actuation = false }
+huri_core = ">=0.4.0.dev0,<0.5"

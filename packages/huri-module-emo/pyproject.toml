@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=64,<82"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "huri-module-emo"
+version = "0.1.0"
+description = "HuRI module: Speech emotion from prosody (wav2vec2 classifier), and its aggregator"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "huri-core[server]>=0.4.0.dev0,<0.5",
+  "huri-events>=0.1,<0.2",
+  "numpy>=1.26,<2",
+  "torch",
+  "transformers>=4.46",
+]
+
+[project.entry-points."huri.modules"]
+emo = "huri_emo.module:EMO"
+eag = "huri_emo.aggregator:EAG"
+
+[tool.setuptools.packages.find]
+include = ["huri_emo*"]
+
+[tool.setuptools.package-data]
+huri_emo = ["huri_module.toml", "manifests/*/huri_module.toml"]

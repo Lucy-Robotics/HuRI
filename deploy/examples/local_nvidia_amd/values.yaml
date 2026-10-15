@@ -27,9 +27,12 @@ ray:
     applications:
       - name: huri-app
         route_prefix: /
-        import_path: src.app:app
+        import_path: huri_core.app:app
         runtime_env:
           env_vars:
+            # Modules this server enables (default-deny: unset enables none).
+            # Keep in step with the *Handle deployments below.
+            HURI_MODULES: "vad,stt,tag,emo,eag,qag,rag,tts,mov"
             RAY_COLOR_PREFIX: "1"
             # Gesture sliding-window defaults. The Gesture *module* runs in the
             # HuRI (CPU) actor, so these live app-wide here rather than on the
@@ -286,7 +289,7 @@ models:
       # inside mountPath, so the final path is mountPath/modelId.
       modelId: FunAudioLLM/Fun-CosyVoice3-0.5B-2512
     # Env vars injected into every worker that mounts this model.
-    # HURI_MODEL_PATH must match mountPath/modelId (see text_to_speech.py).
+    # HURI_MODEL_PATH must match mountPath/modelId (see huri_tts_cosyvoice/handle.py).
     env:
       HURI_MODEL_PATH: /models/cosytts/FunAudioLLM/Fun-CosyVoice3-0.5B-2512
       # Path to the CosyVoice repo root containing third_party/Matcha-TTS.

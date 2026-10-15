@@ -1,0 +1,9 @@
+# What the module is, readable without importing it (HuRI's startup check and
+# the hub use it). Keep it in step with the module class.
+name = "example"
+summary = "Shouts every finished transcript"
+input = { topic = "huri.transcript", event = "huri_events.speech:Transcript" }
+output = { topic = "example.shout", event = "huri_events_example:Shout" }
+events = ["huri-events>=0.1,<0.2", "huri-events-example>=0.1,<0.2"]
+requires = { gpu = false, actuation = false }
+huri_core = ">=0.4.0.dev0,<0.5"

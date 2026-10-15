@@ -1,10 +1,14 @@
 # Keep the Docker build context small — the repo root is ~1.8G otherwise.
-# The Dockerfiles (deploy/Dockerfile.base, .nvidia) only COPY constraints.txt,
-# serve_requirements.txt, requirements-nvidia.txt and src/ — nothing below is
-# needed in the build context.
+# The Dockerfiles (deploy/Dockerfile.{base,nvidia,amd}) only COPY the
+# requirement/constraint files, huri_core/, packages/, pyproject.toml,
+# README.md, LICENSE and deploy/install_huri.sh — nothing below is needed in
+# the build context.
 .venv/
 .git/
 node_modules/
 **/__pycache__/
 **/*.pyc
 *.log
+**/build/
+**/*.egg-info/
+**/.pytest_cache/

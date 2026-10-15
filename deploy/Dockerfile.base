@@ -16,4 +16,12 @@ COPY constraints.txt /app
 COPY serve_requirements.txt /app
 RUN pip install --no-cache-dir -c /app/constraints.txt -r serve_requirements.txt
 
-COPY src /app/src
+# HuRI itself: huri-core + the curated events and modules (packages/), as
+# installed distributions — that is how the server finds them (entry points).
+# Built from a copy the build user owns, since pip builds local projects in
+# place; the script fails the build if modules and events do not fit together.
+COPY --chown=ray pyproject.toml README.md LICENSE /tmp/huri-src/
+COPY --chown=ray huri_core /tmp/huri-src/huri_core
+COPY --chown=ray packages /tmp/huri-src/packages
+COPY --chown=ray deploy/install_huri.sh /tmp/huri-src/
+RUN sh /tmp/huri-src/install_huri.sh /tmp/huri-src && rm -rf /tmp/huri-src

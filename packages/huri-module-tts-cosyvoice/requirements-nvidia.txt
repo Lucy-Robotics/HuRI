@@ -1,0 +1,36 @@
+# CosyVoice3 stack for huri-module-tts-cosyvoice on NVIDIA (CUDA 12.1 wheels):
+#   pip install -c constraints.txt --extra-index-url https://download.pytorch.org/whl/cu121 \
+#     -r requirements-nvidia.txt -e .
+# then ./install_cosyvoice.sh DEST and add it to PYTHONPATH.
+torch==2.3.1
+torchaudio==2.3.1
+numpy==1.26.4
+transformers==4.51.3
+diffusers==0.29.0
+omegaconf==2.3.0
+librosa==0.10.2
+soundfile==0.12.1
+hydra-core==1.3.2          # only because HyperPyYAML configs may resolve hydra refs; safe to keep
+HyperPyYAML==1.2.3
+modelscope==1.20.0
+onnx==1.16.0
+onnxruntime-gpu==1.18.0    # Linux; campplus + speech_tokenizer
+openai-whisper==20250625   # frontend.py: import whisper
+inflect==7.3.1
+wetext==0.0.4              # text normalization fallback (ttsfrd not installed)
+conformer==0.3.2
+x-transformers==2.11.24
+einops==0.8.2
+tiktoken==0.13.0           # cosyvoice/tokenizer
+pyarrow==18.1.0            # imported by cli paths via dataset utils? actually only dataset/processor — can drop
+protobuf==4.25.8          # keep <5 so Ray Serve's _proto_to_dict works; 4.25.8 satisfies onnxruntime>=4.25.8 (also enforced by constraints.txt)
+pydantic==2.13.5           # transitive (transformers/fastapi); fastapi<0.139.2 (see constraints.txt) requires pydantic>=2.9.0
+regex==2025.11.3
+tqdm==4.67.3
+rich==13.7.1                # cosyvoice/flow/flow_matching.py -> matcha.utils.rich_utils
+
+# Imported at inference by Matcha-TTS / HyperPyYAML (see install_local.sh).
+lightning==2.2.4
+gdown==5.1.0
+wget==3.2
+pyworld==0.3.4
