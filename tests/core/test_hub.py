@@ -45,6 +45,7 @@ def checkout(tmp_path):
     (tmp_path / "registry.toml").write_text(REGISTRY_TEXT)
     (tmp_path / "check_registry.py").write_text("")
     (tmp_path / "packages" / "huri-module-stt").mkdir(parents=True)
+    (tmp_path / "packages" / "huri-events").mkdir()
     return tmp_path
 
 
@@ -56,7 +57,7 @@ def registry(checkout):
 @pytest.fixture(autouse=True)
 def isolated(monkeypatch, tmp_path):
     """No ambient HURI_* setting, and no checkout around the current directory."""
-    for var in ("HURI_MODULES_REF", "HURI_REGISTRY"):
+    for var in ("HURI_MODULES_REF", "HURI_REGISTRY", "HURI_REF"):
         monkeypatch.delenv(var, raising=False)
     monkeypatch.setattr(hub, "installed_core_version", lambda: "0.4.0")
 
@@ -161,7 +162,11 @@ def test_install_a_curated_module_from_a_checkout(capsys, checkout):
     )
     assert code == 0
     assert "stt: verified" in out
-    assert f"pip install {checkout / 'packages' / 'huri-module-stt'}" in out
+    packages = checkout / "packages"
+    # The events come from the same checkout, in the same pip command: they
+    # are on no package index.
+    stt, events = packages / "huri-module-stt", packages / "huri-events"
+    assert f"pip install {stt} {events}\n" in out
     assert "not enabled" in out and "HURI_MODULES" in out
 
 
@@ -338,3 +343,169 @@ def test_missing_client_extra_is_explained(capsys, monkeypatch):
     monkeypatch.setattr(hub, "cmd_list", needs_packaging)
     assert hub.main(["list"], fetch=fetch) == 1
     assert 'pip install "huri-core[client]"' in capsys.readouterr().err
+
+
+PIPER_PYPROJECT = """
+[project]
+name = "huri-module-tts-piper"
+dependencies = [
+  "huri-core[server]>=0.4.0.dev0,<0.5",
+  "huri-events>=0.1,<0.2",
+  "huri-tts>=0.1,<0.2",
+  "piper-tts>=1.3",
+]
+"""
+TTS_PYPROJECT = """
+[project]
+name = "huri-tts"
+dependencies = ["huri-core>=0.4.0.dev0,<0.5", "huri-events>=0.1,<0.2"]
+"""
+TTS_ENTRY = """
+[[module]]
+name = "tts"
+package = "huri-module-tts-piper"
+huri_core = ">=0.4.0.dev0,<0.5"
+source = { path = "packages/huri-module-tts-piper" }
+"""
+
+
+def test_install_stt_brings_huri_events_from_huri_modules_at_the_same_ref(
+    capsys, monkeypatch, tmp_path
+):
+    monkeypatch.chdir(tmp_path)  # not in a checkout
+    monkeypatch.setenv("HURI_MODULES_REF", "0.1.0")
+    remote = {hub.default_registry(): REGISTRY_TEXT}
+    code, out = (
+        hub.main(["install", "stt", "--dry-run"], fetch=remote.get),
+        capsys.readouterr().out,
+    )
+    assert code == 0
+    repo = "git+https://github.com/Lucy-Robotics/huri-modules.git@0.1.0"
+    stt = f"{repo}#subdirectory=packages/huri-module-stt"
+    events = f"{repo}#subdirectory=packages/huri-events"
+    assert f"pip install {stt} {events}\n" in out
+
+
+def test_a_curated_module_brings_the_curated_libraries_it_depends_on(capsys, checkout):
+    (checkout / "registry.toml").write_text(REGISTRY_TEXT + TTS_ENTRY)
+    packages = checkout / "packages"
+    for name, pyproject in [
+        ("huri-module-tts-piper", PIPER_PYPROJECT),
+        ("huri-tts", TTS_PYPROJECT),
+    ]:
+        (packages / name).mkdir()
+        (packages / name / "pyproject.toml").write_text(pyproject)
+    code, out = run(
+        ["install", "tts", "--dry-run", "--registry", str(checkout)], capsys
+    )
+    assert code == 0
+    piper, events, tts = (
+        packages / "huri-module-tts-piper",
+        packages / "huri-events",
+        packages / "huri-tts",
+    )
+    assert f"pip install {piper} {events} {tts}\n" in out
+
+
+def test_a_verified_third_party_module_also_gets_the_curated_events(
+    capsys, registry, checkout
+):
+    _, out = run(["install", "lights", "--dry-run", "--registry", registry], capsys)
+    lights = "git+https://github.com/acme/huri-lights@0.2.0#subdirectory=module"
+    assert f"pip install {lights} {checkout / 'packages' / 'huri-events'}\n" in out
+
+
+def test_a_huri_modules_registry_url_installs_from_its_own_ref(capsys, monkeypatch):
+    url = hub.RAW.format(repo=hub.HURI_MODULES_REPO, ref="0.1.0", path="registry.toml")
+    registry = hub.read_registry(url, fetch=lambda u: REGISTRY_TEXT)
+    repo = "git+https://github.com/Lucy-Robotics/huri-modules.git"
+    assert registry.ref == "0.1.0"
+    stt = registry.modules[0]
+    assert stt.install == f"{repo}@0.1.0#subdirectory=packages/huri-module-stt"
+    assert registry.companions(stt, fetch=lambda u: None) == [
+        f"{repo}@0.1.0#subdirectory=packages/huri-events"
+    ]
+    assert capsys.readouterr().err == ""
+
+    monkeypatch.setenv("HURI_MODULES_REF", "main")
+    assert hub.read_registry(url, fetch=lambda u: REGISTRY_TEXT).ref == "0.1.0"
+    assert "HURI_MODULES_REF=main ignored" in capsys.readouterr().err
+
+
+def test_another_registry_url_names_the_ref_curated_packages_come_from(capsys):
+    hub.read_registry(
+        "https://example.org/registry.toml", fetch=lambda u: REGISTRY_TEXT
+    )
+    assert "installed from huri-modules@main" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    "entry, error",
+    [
+        (
+            'summary = "no name"\nsource = { path = "packages/x" }',
+            "registry module #3 has no `name`",
+        ),
+        (
+            'name = "bad"\nhuri_core = "bogus"\nsource = { path = "packages/x" }',
+            "'bad': invalid huri_core range 'bogus'",
+        ),
+        ('name = "nosource"', "'nosource' has no `path` or `git` source"),
+        (
+            'name = "both"\nsource = { path = "packages/x", git = "https://x", '
+            'tag = "1", submodule = "modules/x" }',
+            "'both': a source is either `path` or `git`, not both",
+        ),
+        (
+            'name = "plain"\nsource = { git = "http://x", tag = "1", '
+            'submodule = "modules/x" }',
+            "'plain': a git source must be an https URL",
+        ),
+        (
+            'name = "nosub"\nsource = { git = "https://x", tag = "1" }',
+            "'nosub': git source lacks ['submodule']",
+        ),
+        (
+            'name = "extra"\nsource = { path = "packages/x", ref = "main" }',
+            "'extra': path source has unknown ['ref']",
+        ),
+        (
+            'name = "empty"\nsource = { git = "https://x", tag = "1", '
+            'submodule = "modules/x", subdirectory = "" }',
+            "'empty': every `source` value must be a non-empty string",
+        ),
+    ],
+)
+def test_a_malformed_registry_entry_is_a_readable_error(capsys, tmp_path, entry, error):
+    text = REGISTRY_TEXT + f"\n[[module]]\n{entry}\n"
+    (tmp_path / "registry.toml").write_text(text)
+    argv = ["list", "--no-crawl", "--registry", str(tmp_path / "registry.toml")]
+    assert hub.main(argv, fetch=fetch) == 1
+    err = capsys.readouterr().err
+    assert error in err and "Traceback" not in err
+
+
+def test_a_newer_registry_schema_is_a_readable_error(capsys, tmp_path):
+    (tmp_path / "registry.toml").write_text("schema = 2\n")
+    argv = ["list", "--registry", str(tmp_path / "registry.toml")]
+    assert hub.main(argv, fetch=fetch) == 1
+    assert "registry schema 2" in capsys.readouterr().err
+
+
+def test_list_and_install_name_the_registry_they_read(capsys, registry):
+    for argv in (["list", "--no-crawl"], ["install", "stt", "--dry-run"]):
+        assert hub.main([*argv, "--registry", registry], fetch=fetch) == 0
+        assert f"registry: {registry}" in capsys.readouterr().err
+
+
+def test_stale_settings_are_not_ignored_silently(capsys, checkout, monkeypatch):
+    monkeypatch.setenv("HURI_REF", "0.3.0")
+    monkeypatch.chdir(checkout)
+    assert hub.main(["list", "--verified"], fetch=fetch) == 0
+    assert "HURI_REF is ignored: it was renamed HURI_MODULES_REF" in (
+        capsys.readouterr().err
+    )
+    monkeypatch.setenv("HURI_MODULES_REF", "0.1.0")
+    assert hub.main(["list", "--verified"], fetch=fetch) == 0
+    err = capsys.readouterr().err
+    assert "HURI_MODULES_REF=0.1.0 ignored: using the huri-modules checkout" in err
