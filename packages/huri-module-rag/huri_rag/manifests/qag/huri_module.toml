@@ -1,0 +1,7 @@
+name = "qag"
+summary = "Joins a transcript and its emotion into a question"
+input = { topic = "huri.partial_question", event = "huri_events.question:PartialQuestion" }
+output = { topic = "huri.question", event = "huri_events.question:RAGQuestion" }
+events = ["huri-events>=0.1,<0.2"]
+requires = { gpu = false, actuation = false }
+huri_core = ">=0.4.0.dev0,<0.5"

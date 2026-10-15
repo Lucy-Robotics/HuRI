@@ -78,7 +78,7 @@ jobs:
         run: |
           python - <<'PY'
           import glob, sys, yaml
-          REQUIRED = ("user_id", "huri_url", "interface_path")
+          REQUIRED = ("user_id", "huri_url", "modules", "send", "subscribe")
           bad = []
           for path in sorted(glob.glob("config/client_*.yaml")):
               raw = yaml.safe_load(open(path)) or {}
@@ -103,13 +103,13 @@ jobs:
       - name: install the lint toolchain only
         # mypy has ignore_missing_imports, so it runs without ray/torch/etc.
         run: pip install -c constraints.txt black isort flake8 flake8-toml-config mypy
-      - run: black --check src tests
-      - run: isort --check-only src tests
-      - run: flake8 src tests
+      - run: black --check huri_core tests
+      - run: isort --check-only huri_core tests
+      - run: flake8 huri_core tests
       - name: mypy
-        # Not gating yet: src/modules/rag/{semantic_chunker,ingestion}.py carry
+        # Not gating yet: packages/huri-module-rag/huri_rag/{semantic_chunker,ingestion}.py carry
         # pre-existing errors. Remove `|| true` once those are fixed.
-        run: mypy src --check-untyped-defs || true
+        run: mypy huri_core packages --check-untyped-defs || true
       - name: mypy (files that are already clean must stay clean)
         # --follow-imports=silent: report only on the files listed below.
         # modules.py imports MOV, so mypy follows it into
@@ -119,8 +119,8 @@ jobs:
         # needed and unused depending on the environment.
         run: |
           mypy --check-untyped-defs --follow-imports=silent \
-            src/core src/interfaces src/modules/text_to_speech \
-            src/modules/speech_to_text src/modules/factory.py src/modules/modules.py
+            huri_core/core packages/huri-events/huri_events examples/cli/huri_cli packages/huri-tts/huri_tts \
+            packages/huri-module-vad/huri_vad packages/huri-module-stt/huri_stt packages/huri-module-tag/huri_tag
 
   plan:
     name: installer plan (${{ matrix.name }})
@@ -238,19 +238,26 @@ jobs:
             --index-url https://download.pytorch.org/whl/cpu \
             torch==2.3.1 torchaudio==2.3.1
           pip install -c constraints.txt -r serve_requirements.txt -r requirements.txt
+          # Registers the modules and events (entry points) — HuRI finds them there.
+          pip install --no-deps -e . -e examples/cli
+          for pkg in packages/*/; do pip install --no-deps -e "$pkg"; done
       - run: pytest -q
+      - name: the curated-module registry matches its packages
+        run: python huri-modules/check_registry.py
+      - name: the landing pages and READMEs link to things that exist
+        run: python landing/check_links.py landing README.md huri-modules templates examples packages
       - name: the shipped client configs load through the real loader
         # Stricter than the `configs` job: this exercises ClientConfig.from_dict
         # and the sender/hook/module dataclasses, not just YAML syntax.
         run: |
           python - <<'PY'
           import glob, sys
-          from src.client import load_client_config
+          from huri_core.core.client import load_client_config
           bad = []
           for path in sorted(glob.glob("config/client_*.yaml")):
               try:
                   cfg = load_client_config(path)
-                  print(f"ok   {path}  modules={len(cfg.modules)} hooks={list(cfg.hooks)}")
+                  print(f"ok   {path}  modules={len(cfg.modules)} subscribe={cfg.subscribe}")
               except Exception as exc:
                   print(f"FAIL {path}  {type(exc).__name__}: {exc}")
                   bad.append(path)
@@ -260,8 +267,9 @@ jobs:
         run: |
           for mods in "" "rag" "vad,stt,tag,qag,rag" "vad,stt,tag,qag,rag,emo,eag,tts"; do
             HURI_MODULES="$mods" python -c "
-          import os, src.modules.modules as m
-          got = m.get_modules()
+          import os
+          from huri_core.core.plugins import load_modules, parse_selection
+          got = load_modules(parse_selection(os.environ['HURI_MODULES']))
           print(f'HURI_MODULES={os.environ[\"HURI_MODULES\"]!r:42s} -> {len(got)} modules')
           "
           done

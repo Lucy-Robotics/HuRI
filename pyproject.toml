@@ -1,3 +1,68 @@
+[build-system]
+requires = ["setuptools>=64,<82"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "huri-core"
+dynamic = ["version"]
+description = "HuRI: realtime, modular conversational pipeline for robots"
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.10"
+# The base install is the abstract framework only (Module, EventData, bus):
+# no third-party dependency. Heavy parts sit behind extras so a client never
+# installs Ray or FastAPI. requirements*.txt keep the exact pins the images and
+# install_local.sh use; tests/core/test_packaging.py keeps both in step.
+dependencies = []
+
+[project.optional-dependencies]
+# Ray Serve app builder + FastAPI ingress, and the pins that constrain that
+# process whatever modules are loaded (see constraints.txt for the why of each).
+server = [
+  "ray[serve]>=2.55.1,<2.56",
+  "fastapi<0.139.2",
+  "protobuf==4.25.8",
+  "setuptools<82",
+  "click<8.2",
+  # Version ranges of module manifests (huri_module.toml).
+  "packaging>=23",
+  "tomli>=2; python_version < '3.11'",
+]
+# Client SDK: websocket transport and YAML config loading.
+client = [
+  "websockets>=16,<17",
+  "omegaconf>=2.3,<2.4",
+  # `huri hub` compares manifests' huri-core ranges.
+  "packaging>=23",
+  "tomli>=2; python_version < '3.11'",
+]
+dev = [
+  "black==26.3.1",
+  "flake8==7.3.0",
+  "flake8-toml-config==1.0.0",
+  "isort==8.0.1",
+  "mypy==1.20.2",
+  "pytest==9.0.3",
+  "pytest-asyncio==1.4.0",
+]
+
+[project.scripts]
+huri = "huri_core.cli:main"
+
+[project.urls]
+Repository = "https://github.com/Lucy-Robotics/HuRI"
+
+# huri-core registers no module and no event: the curated ones come from their
+# own packages (packages/huri-events, packages/huri-module-*), through the
+# entry points in their pyproject.toml (see huri_core/core/plugins.py).
+
+[tool.setuptools.dynamic]
+# Single source of truth: huri_core/__init__.py. See RELEASING.md.
+version = { attr = "huri_core.__version__" }
+
+[tool.setuptools.packages.find]
+include = ["huri_core*"]
+
 [tool.black]
 line-length = 88
 target-version = ["py310"]
@@ -27,8 +92,24 @@ warn_return_any = true
 warn_unused_configs = true
 exclude = [
   "^tests/",
+  "^packages/[^/]+/tests/",
+  "^templates/.*/tests/",
 ]
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+testpaths = ["tests", "packages/*/tests"]
+# Separate distributions living in this repo (packages/*, examples/cli).
+pythonpath = [
+  "packages/huri-events",
+  "packages/huri-module-vad",
+  "packages/huri-module-stt",
+  "packages/huri-module-tag",
+  "packages/huri-module-emo",
+  "packages/huri-module-rag",
+  "packages/huri-module-mov",
+  "packages/huri-tts",
+  "packages/huri-module-tts-piper",
+  "packages/huri-module-tts-cosyvoice",
+  "examples/cli",
+]
 python_files = ["test_*.py"]

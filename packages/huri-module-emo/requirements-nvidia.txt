@@ -1,0 +1,5 @@
+# Hardware pins of huri-module-emo on NVIDIA. torch from the CUDA 12.1 index.
+# Installed by scripts/install_local.sh through scripts/module_requirements.py.
+torch==2.3.1
+torchaudio==2.3.1
+transformers==4.51.3

@@ -389,6 +389,18 @@ stage_enabled() {
 
 mb_to_gb() { awk -v m="$1" 'BEGIN{printf "%.1f", m/1024}'; }
 
+# The plan calls the TTS module "tts"; the chosen engine decides which package
+# provides it: huri-module-tts-piper registers `tts` (deployment TTSHandle),
+# huri-module-tts-cosyvoice `tts_cosyvoice` (deployment CosyVoiceTTSHandle).
+tts_module() { if [[ "$TTS_ENGINE" == "cosyvoice" ]]; then echo tts_cosyvoice; else echo tts; fi; }
+tts_deployment() { if [[ "$TTS_ENGINE" == "cosyvoice" ]]; then echo CosyVoiceTTSHandle; else echo TTSHandle; fi; }
+served_modules() { # P_MODULES with the engine's TTS module name
+  local m out=() mods
+  IFS=',' read -r -a mods <<<"$P_MODULES"
+  for m in "${mods[@]}"; do [[ "$m" == "tts" ]] && m="$(tts_module)"; out+=("$m"); done
+  (IFS=,; echo "${out[*]}")
+}
+
 # --- ROCm helpers ------------------------------------------------------------
 
 # The pip wheels this installer pulls (repo.radeon.com torch/torchaudio/triton
@@ -1136,7 +1148,7 @@ HURI_GPU_VRAM_MB=$GPU_VRAM_MB
 HURI_RAY_GPUS=$P_RAY_GPUS
 HURI_RAY_CPUS=$CPU_CORES
 HURI_VERDICT=$P_VERDICT
-HURI_MODULES=$P_MODULES
+HURI_MODULES=$(served_modules)
 HURI_STT_SIZE=$STT_SIZE
 HURI_STT_DEVICE=$P_STT_DEV
 HURI_TTS_DEVICE=$P_TTS_DEV
@@ -1331,6 +1343,7 @@ install_python_deps() {
   # upgrade used to run before C was defined and without it, pulling the newest
   # setuptools and relying on a later resolution to walk it back.
   local C=(-c "$REPO_ROOT/constraints.txt")
+
   run "$PIP" install "${C[@]}" --upgrade pip setuptools wheel
 
   # ABI tag of the interpreter that will actually receive the wheels. The ROCm
@@ -1362,6 +1375,24 @@ install_python_deps() {
     P_RAY_GPUS=0
     [[ "$P_EMO_DEV" != "off" ]] && P_EMO_DEV="cpu"
   fi
+
+  # What each planned module declares for this host's hardware — decided
+  # after the ROCm fallback above, which can turn an AMD host into a CPU one
+  # (packages/*/pyproject.toml + requirements-<variant>.txt; the variant is the
+  # host's since the torch build is shared). Merged, and checked for modules
+  # pinning one package to different versions, before anything heavy is
+  # installed; the merged file itself is installed last (step 7).
+  local variant=cpu
+  [[ "$GPU_VENDOR" == "nvidia" || "$GPU_VENDOR" == "amd" ]] && variant="$GPU_VENDOR"
+  local modules_req="$STATE_DIR/requirements-modules.generated.txt" merged
+  if ! merged="$("$PY_BIN" "$REPO_ROOT/scripts/module_requirements.py" \
+                  --variant "$variant" --modules "$(served_modules)" 2>&1)"; then
+    err "the planned modules cannot be installed together on this $variant host:"
+    local line
+    while IFS= read -r line; do note "$line"; done <<<"$merged"
+    die "fix the pins in packages/*/requirements-$variant.txt, or leave a module out with --modules"
+  fi
+  (( DRY_RUN )) || printf '%s\n' "$merged" | write_file "$modules_req"
 
   # 1. Vendor torch FIRST, so every later resolution (sentence-transformers,
   #    transformers, faster-whisper) sees a satisfying torch and does not pull
@@ -1408,6 +1439,18 @@ install_python_deps() {
   run "$PIP" install "${C[@]}" -r "$REPO_ROOT/serve_requirements.txt"
   info "  base requirements"
   run "$PIP" install "${C[@]}" -r "$REPO_ROOT/requirements.txt"
+  # HuRI itself, editable: registers its modules and events (entry points),
+  # which is how the server finds them.
+  info "  huri-core (editable)"
+  run "$PIP" install "${C[@]}" --no-deps -e "$REPO_ROOT"
+  # The curated events and modules: one distribution each under packages/.
+  # Their dependencies come from the requirement files installed above.
+  local pkg
+  for pkg in "$REPO_ROOT"/packages/*/; do
+    run "$PIP" install "${C[@]}" --no-deps -e "$pkg"
+  done
+  # The reference CLI client (huri-cli); its deps are in requirements.txt.
+  run "$PIP" install "${C[@]}" --no-deps -e "$REPO_ROOT/examples/cli"
 
   # 3. (The ROCm CTranslate2 wheel is installed in step 1, alongside torch; the
   #    AMD requirements file is installed last, in step 5 — see the note there.)
@@ -1452,13 +1495,22 @@ install_python_deps() {
     fi
   fi
 
+  # 7. The planned modules' own requirements for this hardware (merged above).
+  #    Mostly satisfied by the steps before; what it adds is that the module
+  #    packages are the reference for their dependencies.
+  info "  module requirements ($variant: $(served_modules))"
+  local idx=()
+  [[ "$variant" == "nvidia" ]] \
+    && idx=(--extra-index-url "$TORCH_CUDA_INDEX" --extra-index-url https://pypi.ngc.nvidia.com)
+  run "$PIP" install "${C[@]}" ${idx[@]+"${idx[@]}"} -r "$modules_req"
+
   ok "python environment ready"
 }
 
 generate_cpu_requirements() {
   # Derived from requirements-nvidia.txt: drop the torch pins (installed above
   # from the CPU/ROCm index), swap onnxruntime-gpu for the CPU build, and drop
-  # the EMAGE *rendering/training* extras — src/modules/gesture/emage only needs
+  # the EMAGE *rendering/training* extras — huri_mov/emage only needs
   # torch + transformers + omegaconf + huggingface_hub.
   local out="$STATE_DIR/requirements-local.generated.txt" p
   # Always safe to drop: torch/torchaudio come from the vendor index above, and
@@ -1863,15 +1915,15 @@ http_options:
 applications:
   - name: huri-app
     route_prefix: /
-    import_path: src.app:app
+    import_path: huri_core.app:app
     runtime_env:
       env_vars:
         RAY_COLOR_PREFIX: "1"
         PYTHONPATH: "$pythonpath"
 
         # Only these modules are registered, so no deployment is created for the
-        # ones this machine cannot run (see src/modules/modules.py).
-        HURI_MODULES: "$P_MODULES"
+        # ones this machine cannot run (see huri_core/core/plugins.py).
+        HURI_MODULES: "$(served_modules)"
 
         # --- STT (faster-whisper) ---
         HURI_STT_MODEL_PATH: "$whisper_path"
@@ -1890,7 +1942,6 @@ EOF
         # --- TTS (piper) ---
         # ONNX only: no torch, no GPU, ~30x faster than realtime on CPU.
         # Switch engines with --tts-engine cosyvoice (needs an NVIDIA GPU).
-        HURI_TTS_ENGINE: "piper"
         HURI_PIPER_VOICE: "$MODELS_DIR/piper/$PIPER_VOICE_NAME.onnx"
 EOF
     fi
@@ -1898,7 +1949,6 @@ EOF
       cat <<EOF
 
         # --- TTS (CosyVoice3) ---
-        HURI_TTS_ENGINE: "cosyvoice"
         HURI_MODEL_PATH: "$cosy_model"
         HURI_COSY_DIR: "$cosy_dir"
         HURI_VOICE_SAMPLE_PATH: "$ASSETS_DIR/voice.wav"
@@ -1985,7 +2035,7 @@ EOF
     if [[ "$P_TTS_DEV" != "off" ]]; then
       cat <<EOF
 
-      - name: TTSHandle
+      - name: $(tts_deployment)
         ray_actor_options:
           num_cpus: 1
           num_gpus: $P_TTS_FRAC
@@ -2014,7 +2064,7 @@ EOF
   ok "serve config → config/huri_local.generated.yaml"
 
   # Same runtime_env, as a sourceable .env: `serve deploy` injects those vars
-  # into the replicas, but `python -m src.launch_huri`, ingestion.py or a pytest
+  # into the replicas, but `python -m huri_core.launch_huri`, ingestion.py or a pytest
   # run get nothing. env.sh sources this so both paths see identical settings.
   # The YAML is our own output, so the shape below is stable.
   if (( ! DRY_RUN )); then
@@ -2041,44 +2091,26 @@ EOF
   local client_cfg="$REPO_ROOT/config/client_local.generated.yaml"
   {
     echo "# Client config generated by scripts/install_local.sh — modules match"
-    echo "# HURI_MODULES in config/huri_local.generated.yaml ($P_MODULES)."
+    echo "# HURI_MODULES in config/huri_local.generated.yaml ($(served_modules))."
     echo "huri_url: ws://localhost:8000/session"
-    echo "interface_path: src.interfaces.cli_interface:cli_interface"
     echo
-    echo "senders:"
-    echo "  audio:"
-    echo "    name: audio"
-    echo "    topic: audio.in"
-    echo "    args:"
-    echo "      sample_rate: 16000"
-    echo "      frame_duration: 0.030"
-    echo "  text:"
-    echo "    name: text"
-    echo "    topic: question"
-    echo "    args:"
-    echo "      sample_rate: 16000"
-    echo "      frame_duration: 0.030"
+    echo "# Topics this client publishes, and the ones it receives."
+    echo "send: [huri.audio.in, huri.question]"
+    local subscribe="huri.token"
+    [[ "$P_TTS_DEV" != "off" ]] && subscribe+=", huri.audio.out"
+    [[ "$P_GES_DEV" != "off" ]] && subscribe+=", huri.motion"
+    echo "subscribe: [$subscribe]"
     echo
-    echo "hooks:"
-    echo "  token:"
-    echo "    name: token"
-    echo "    topics: [token]"
+    echo "# Device settings of the CLI client; the server never reads them."
+    echo "cli:"
+    echo "  audio_in:"
+    echo "    sample_rate: 16000"
+    echo "    frame_duration: 0.030"
     if [[ "$P_TTS_DEV" != "off" ]]; then
-      echo "  audio:"
-      echo "    name: audio"
-      echo "    topics: [audio.out]"
-      echo "    args:"
-      echo "      incoming_sample_rate: \${senders.audio.args.sample_rate}"
-      echo "      sample_rate: 44100"
-      # AudioHook.__init__ declares save_audio_dir with no default, and hooks are
-      # built with **hook.args — so omitting it is a hard TypeError at client
-      # startup, before the websocket is even opened. Empty = do not save.
-      echo "      save_audio_dir: \"\""
-    fi
-    if [[ "$P_GES_DEV" != "off" ]]; then
-      echo "  motion:"
-      echo "    name: motion"
-      echo "    topics: [motion]"
+      echo "  audio_out:"
+      echo "    incoming_sample_rate: \${cli.audio_in.sample_rate}"
+      echo "    sample_rate: 44100"
+      echo "    save_audio_dir: \"\""
     fi
     echo
     echo "modules:"
@@ -2087,13 +2119,13 @@ EOF
     echo "    args:"
     echo "      vad_agressiveness: 3"
     echo "      silence_duration: 1.5"
-    echo "      block_duration: \${senders.audio.args.frame_duration}"
+    echo "      block_duration: \${cli.audio_in.frame_duration}"
     echo "    logging: INFO"
     echo "  stt:"
     echo "    name: stt"
     echo "    args:"
     echo "      language: en"
-    echo "      block_duration: \${senders.audio.args.frame_duration}"
+    echo "      block_duration: \${cli.audio_in.frame_duration}"
     echo "    logging: INFO"
     echo "  tag:"
     echo "    name: tag"
@@ -2104,7 +2136,7 @@ EOF
       echo "  emo:"
       echo "    name: emo"
       echo "    args:"
-      echo "      block_duration: \${senders.audio.args.frame_duration}"
+      echo "      block_duration: \${cli.audio_in.frame_duration}"
       echo "  eag:"
       echo "    name: eag"
     fi
@@ -2128,9 +2160,9 @@ EOF
     echo "      max_length: 1024"
     echo "    logging: INFO"
     if [[ "$P_TTS_DEV" != "off" ]]; then
-      echo "  tts:"
-      echo "    name: tts"
-      # No args: TTS.__init__ takes only the deployment handle, and hooks/modules
+      echo "  $(tts_module):"
+      echo "    name: $(tts_module)"
+      # No args: TTS.__init__ takes only the deployment handle, and modules
       # are built with **cfg.args — so any key here is a hard TypeError at
       # session start. The old `min_clause_chars: 20` is a leftover from a design
       # where HuRI buffered clauses itself; CosyVoice's frontend now does the
@@ -2192,8 +2224,8 @@ export HSA_OVERRIDE_GFX_VERSION=$GFX_OVERRIDE"
 # shellcheck shell=bash
 # Source this for a shell configured exactly like a Serve replica:
 #     source .huri-local/env.sh
-#     python -m src.launch_huri                      # run HuRI without serve deploy
-#     python -m src.modules.rag.ingestion --help     # feed the RAG memory
+#     python -m huri_core.launch_huri                      # run HuRI without serve deploy
+#     python -m huri_rag.ingestion --help     # feed the RAG memory
 export HURI_ROOT="$REPO_ROOT"
 export HURI_STATE="$STATE_DIR"
 # shellcheck disable=SC1091
@@ -2302,7 +2334,7 @@ EOF
     cat <<EOF
 
 # --- 3. Ray head ------------------------------------------------------------
-# Started from the repo root so replicas can import src.app.
+# Started from the repo root so replicas can import huri_core.app.
 EOF
 
     if [[ "$GPU_VENDOR" == "amd" ]] && (( GPU_COUNT > 1 )); then
@@ -2354,7 +2386,7 @@ if [ "\$huri_state" = "RUNNING" ]; then
   echo
   echo "HuRI is up. Talk to it with:"
   echo "    source .huri-local/env.sh"
-  echo "    python -m src.client --config config/client_local.generated.yaml"
+  echo "    huri-cli --config config/client_local.generated.yaml"
   echo
   echo "Status: .huri-local/status.sh   Dashboard: http://127.0.0.1:8265"
 else
@@ -2507,11 +2539,11 @@ PY
 
   # The registry is what turns HURI_MODULES into Serve deployments; if it cannot
   # be built, `serve deploy` fails later with a much less obvious error.
-  if out="$(cd "$REPO_ROOT" && HURI_MODULES="$P_MODULES" PYTHONWARNINGS=ignore \
-            "$VPY" -c 'import src.modules.modules as m; print(len(m.get_modules()), "modules registered")' 2>&1 | tail -1)"; then
+  if out="$(cd "$REPO_ROOT" && HURI_MODULES="$(served_modules)" PYTHONWARNINGS=ignore \
+            "$VPY" -c 'import os; from huri_core.core.plugins import load_modules, parse_selection; print(len(load_modules(parse_selection(os.environ.get("HURI_MODULES")))), "modules registered")' 2>&1 | tail -1)"; then
     ok "module registry builds: $out"
   else
-    err "module registry failed to build (HURI_MODULES=$P_MODULES):"
+    err "module registry failed to build (HURI_MODULES=$(served_modules)):"
     detail "$out"
     failures=1
   fi
@@ -2641,7 +2673,7 @@ PY
     # has no later provisioning step: if the file is not here now, it never
     # will be, and every TTS session will fail per-request (each error is
     # logged but swallowed by the event graph, so the client just gets no
-    # audio — see src/core/events.py::EventGraph._run). Treat it as a hard
+    # audio — see huri_core/core/events.py::EventGraph._run). Treat it as a hard
     # requirement rather than the best-effort skip TTSHandle allows.
     if [[ -f "$ASSETS_DIR/voice.wav" ]]; then
       ok "voice sample present at $ASSETS_DIR/voice.wav"
@@ -2654,7 +2686,7 @@ PY
   fi
 
   if [[ "$P_GES_DEV" != "off" ]]; then
-    if (cd "$REPO_ROOT" && "$VPY" -c 'from src.modules.gesture.emage import EmageAudioModel' 2>/dev/null); then
+    if (cd "$REPO_ROOT" && "$VPY" -c 'from huri_mov.emage import EmageAudioModel' 2>/dev/null); then
       ok "EMAGE importable"
     else
       err "EMAGE import failed"; failures=1
@@ -2679,7 +2711,7 @@ PY
       else
         warn "qdrant has no 'documents' collection — document retrieval will return nothing"
         note "collections present: ${cols:-<none>}"
-        note "Ingest some: source .huri-local/env.sh && python -m src.modules.rag.ingestion --help"
+        note "Ingest some: source .huri-local/env.sh && python -m huri_rag.ingestion --help"
         note "(conversational memory still works — RAGHandle creates it on demand)"
       fi
     elif (( QDRANT_REMOTE )); then
@@ -2775,7 +2807,7 @@ main() {
     Start:   .huri-local/start.sh
     Status:  .huri-local/status.sh
     Client:  source .huri-local/env.sh
-             python -m src.client --config config/client_local.generated.yaml
+             huri-cli --config config/client_local.generated.yaml
     Stop:    .huri-local/stop.sh [--all]
 
     Plan:    .huri-local/plan.env          Log: .huri-local/install.log

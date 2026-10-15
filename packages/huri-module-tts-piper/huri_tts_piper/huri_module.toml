@@ -1,0 +1,7 @@
+name = "tts"
+summary = "Speaks the reply with Piper (ONNX, CPU, ~30x realtime)"
+input = { topic = "huri.token", event = "huri_events.text:Token" }
+output = { topic = "huri.audio.out", event = "huri_events.audio:Audio" }
+events = ["huri-events>=0.1,<0.2"]
+requires = { gpu = false, actuation = false }
+huri_core = ">=0.4.0.dev0,<0.5"

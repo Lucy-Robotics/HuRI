@@ -21,7 +21,7 @@ Then, in a second terminal:
 
 ```sh
 source .huri-local/env.sh
-python -m src.client --config config/client_local.generated.yaml
+huri-cli --config config/client_local.generated.yaml
 ```
 
 You get a `>>` prompt; typing or speaking both work. `\exit` quits the client
@@ -107,12 +107,33 @@ scripts/install_local.sh --tts-engine cosyvoice --voice-sample me.wav \
 scripts/install_local.sh --force-tts --force-gesture --force-emo
 ```
 
-`--modules` sets `HURI_MODULES`, which is what decides the module registry
-(`src/modules/modules.py`) and therefore which Serve deployments exist. The
+`--modules` sets `HURI_MODULES`, which is what decides which of the installed
+modules the server registers (`huri_core/core/plugins.py`, see "Modules as
+plugins" below) and therefore which Serve deployments exist. The
 **client** config must list the same module names — a client asking for a module
 the server did not register is rejected with a `session_error` naming both sets.
 
 `scripts/install_local.sh --help` lists every flag.
+
+## Docker images
+
+`deploy/Dockerfile.{base,nvidia,amd}` build one image per hardware target (the
+Helm values pick them per worker group). Each installs its hardware's heavy
+dependencies from the requirement files, then `deploy/install_huri.sh` installs
+huri-core and every package under `packages/` (all curated events and modules:
+the head node imports each enabled module to build the app) and **fails the
+build** if a module or event does not load or the versions do not satisfy the
+modules' manifests.
+
+```sh
+docker build -f deploy/Dockerfile.base -t huri:base .
+docker run --rm -p 8000:8000 -e HURI_MODULES=tag,qag huri:base \
+  python -c "import ray; from ray import serve; from huri_core.app import build_app; ray.init(); serve.start(http_options={'host': '0.0.0.0'}); serve.run(build_app(), name='HuRI', blocking=True)"
+python deploy/smoke_session.py ws://127.0.0.1:8000/session   # a real session, no model needed
+```
+
+CI (`.github/workflows/docker.yml`) does exactly this on pull requests; the GPU
+images are built on demand (`workflow_dispatch`).
 
 ## Local install (single machine, no Kubernetes)
 
@@ -137,7 +158,7 @@ It generates:
 ```sh
 .huri-local/start.sh                 # services + ray head + serve deploy
 source .huri-local/env.sh
-python -m src.client --config config/client_local.generated.yaml
+huri-cli --config config/client_local.generated.yaml
 .huri-local/status.sh                # what is up, locally and remotely
 .huri-local/stop.sh --all
 ```
@@ -149,7 +170,7 @@ route (which is green even when every deployment is dead).
 
 `source .huri-local/env.sh` gives a shell configured exactly like a Serve
 replica (model paths, `HURI_MODULES`, STT device, API key), so
-`python -m src.launch_huri` and `python -m src.modules.rag.ingestion` work
+`python -m huri_core.launch_huri` and `python -m huri_rag.ingestion` work
 without `serve deploy`.
 
 Re-run a single stage with `--only`:
@@ -160,6 +181,16 @@ scripts/install_local.sh --only verify          # re-check this machine
 scripts/install_local.sh --only python,models   # reinstall deps and weights
 ```
 
+### Module dependencies per hardware
+
+Each module package declares its own dependencies (`pyproject.toml`) and, where
+the hardware matters, exact pins per variant (`requirements-{cpu,nvidia,amd}.txt`).
+The installer merges them for the modules it planned and the host's variant —
+`scripts/module_requirements.py --variant nvidia --modules stt,rag,...` — and
+**stops before installing anything heavy** if two modules pin the same package
+to different versions, naming both. The merged file
+(`.huri-local/requirements-modules.generated.txt`) is installed last.
+
 ### Feeding the RAG memory
 
 Conversation memory works out of the box (`RAGHandle` creates its collection on
@@ -168,8 +199,8 @@ must match the one the server queries with**, or the vectors will not line up:
 
 ```sh
 source .huri-local/env.sh
-python -m src.modules.rag.ingestion --help
-python -m src.modules.rag.ingestion \
+python -m huri_rag.ingestion --help
+python -m huri_rag.ingestion \
   --embedding-model "$HURI_EMBED_MODEL" --embedding-url "$HURI_EMBED_URL" ...
 ```
 
@@ -211,6 +242,7 @@ then restart (`.huri-local/stop.sh && .huri-local/start.sh`).
 | `Task was killed due to the node running low on memory`        | The plan did fit but Ollama's KV cache grew. Use a smaller tier: `--llm-model mistral:7b`, and `ollama stop <big-model>`.                                            |
 | `torch sees the GPU but cannot launch a kernel on it`          | The torch build has no code objects for your GPU. `--only config` sets `HSA_OVERRIDE_GFX_VERSION` when a compatible same-family arch exists; otherwise run CPU-only. |
 | Client exits with `session_error: Unknown module 'x'`          | The client config lists a module the server did not register. Match it to `HURI_MODULES`, or regenerate both with `--only config`.                                   |
+| Client exits with `session_error: Module 'x' is installed but not enabled` | The server's `HURI_MODULES` does not list it (unset enables nothing). Add it there, or drop it from the client config. |
 | `qdrant is not answering … HuRI does not manage this instance` | Something else already owned the port when you installed, so HuRI never created its own. Start it yourself, or free the port and re-run `--only services`.           |
 | No audio from the client                                       | Check TTS is actually enabled (`grep HURI_MODULES config/huri_local.generated.yaml`) — with `--modules` or a dropped plan there may be no TTS at all.                |
 | Install fails with no explanation                              | Every command's output is in `.huri-local/install.log`, and the error line names the real command.                                                                   |
@@ -234,13 +266,14 @@ the RAG settings then come from `RAGDeploymentConfig`'s env fallbacks, not from
 a Serve `user_config`):
 
 ```sh
-python -m src.launch_huri
+python -m huri_core.launch_huri
 ```
 
-Client:
+Client — the reference CLI is its own package, [examples/cli](examples/cli):
 
 ```sh
-python -m src.client --config config/client_local.generated.yaml
+pip install --no-deps -e examples/cli
+huri-cli --config config/client_local.generated.yaml
 ```
 
 Client config template: [config/client_template.yaml](config/client_template.yaml).
@@ -266,6 +299,25 @@ pip install -c constraints.txt -r requirements-amd.txt
 
 Note that `requirements.txt` also contains the lint/test toolchain.
 
+### Installing as a package
+
+`huri-core` is also pip-installable, with its heavy parts behind extras so a
+client never installs Ray or FastAPI:
+
+```sh
+pip install "huri-core[client] @ git+https://github.com/Lucy-Robotics/HuRI.git@dev"   # client SDK only
+pip install "huri-events @ git+https://github.com/Lucy-Robotics/HuRI.git@dev#subdirectory=packages/huri-events"   # the curated events
+pip install -e examples/cli                                                        # + the reference CLI (huri-cli)
+pip install -c constraints.txt -e ".[server,dev]"                                  # server
+for p in packages/*/; do pip install -c constraints.txt -e "$p"; done              # curated events and modules
+```
+
+Replace `@dev` with a release tag (`@0.4.0`, ...) to pin a version; without
+a ref pip would take the repository's default branch.
+`[server]` is Ray Serve + FastAPI and the pins that keep them working; each
+module package declares its own dependencies, and the GPU ones ship
+`requirements-{nvidia,amd}.txt` pins next to it.
+
 ## Testing a change
 
 ```sh
@@ -275,26 +327,185 @@ make check       # both
 scripts/test_install.sh            # run the installer in clean Ubuntu containers
 ```
 
+### Testing a module alone
+
+`huri_core.testing` runs one module in-process — no Ray, no server, only the
+base `huri-core` install. `ModuleHarness` builds the module like the server
+does, checks the events in and out against its `input_event` / `output_event`,
+and returns what it emitted; `LocalHandle` stands in for the Serve deployment
+of a `ModuleWithHandle`:
+
+```python
+from huri_core.testing import LocalHandle, ModuleHarness
+
+
+class FakeWhisper:  # the deployment's methods the module calls
+    async def transcribe(self, audio, language):
+        return "hello"
+
+
+stt = ModuleHarness(STT, handle=LocalHandle(FakeWhisper()), language="en")
+assert stt.run(Voice(frames), Voice(None))[-1] == Transcript("hello", True)
+```
+
+See `packages/huri-module-stt/tests/test_stt.py` and `tests/core/test_testing.py`.
+
 ## Folder/Module structure
 
-- **root** — entrypoints: `src/app.py`, `src/launch_huri.py` (server),
-  `src/client.py` (client)
-- **src/core** — `huri` (ingress + per-session router), `bus` (event graph),
-  `client` / `interface`, `module`, `session`, `events`, `user_config`,
-  `dataclasses/config`
-- **src/interfaces** — `cli_interface`: the reference client senders (audio,
-  text) and hooks (token, audio, motion)
-- **src/modules**
-  - `speech_to_text` — `microphone_vad` (VAD), `speech_to_text` (STT),
-    `text_aggregator` (TAG)
-  - `text_to_speech` — `piper_tts` (default engine), `text_to_speech`
-    (CosyVoice3 + the `TTS` module)
-  - `rag` — `rag`, `question_aggregator` (QAG), `ingestion`, `semantic_chunker`,
-    `qdrant_utils`, memory maintenance/inspection
-  - `emotion` — `prosody_analysis` (EMO), `emotion_aggregator` (EAG)
-  - `gesture` — `gesture` + the vendored `emage` model code
-  - `utils` — `sender` (forwards events to clients)
-  - `factory`, `modules` — the module registry and `HURI_MODULES` filtering
+- **root** — server entrypoints: `huri_core/app.py`, `huri_core/launch_huri.py`
+- **huri_core/core** — `huri` (ingress + per-session router), `bus` (event graph),
+  `client` (the client SDK, `HuRIClient`), `module`, `session`, `events`, `plugins` (module and
+  event discovery), `manifest`, `compat` (startup/session checks), `factory`
+  (builds a session's modules), `sender` (forwards events to clients),
+  `user_config`, `dataclasses/config`
+- **huri_core/testing** — `ModuleHarness` / `LocalHandle`, to test a module alone
+- **packages/huri-events** — `huri-events`, the curated event classes (one per
+  `huri.*` topic, with its wire format): a separate, light distribution
+  (huri-core + numpy) that clients install to decode the topics
+- **landing** — the code-free entry point: who should start where, the
+  architecture, how to contribute; laid out to become the `huri` repository
+- **huri-modules** — the curated-module registry (`registry.toml`, the
+  "verified" index), its CI check, the listing criteria (`ACCEPTANCE.md`) and
+  `install.sh`; laid out to become the `huri-modules` repository
+- **templates/huri-plugin-template** — the starting point for a new module
+  (entry point, manifest, own events package, tests, per-hardware install,
+  CI); laid out to become the `huri-plugin-template` repository
+- **tests/integration** — the whole curated pipeline in one session, real
+  modules on the real bus with faked model deployments
+- **examples/cli** — `huri-cli`, the reference command-line client: a separate
+  package built on the client SDK (microphone and prompt in; text, speech and a
+  gesture view out)
+- **packages/huri-module-\*** — the curated modules, one distribution each, with
+  its own `pyproject.toml`, `huri_module.toml` manifest(s), tests and, for GPU
+  modules, `requirements-{nvidia,amd}.txt`:
+  - `huri-module-vad` (VAD), `huri-module-stt` (STT, faster-whisper),
+    `huri-module-tag` (TAG)
+  - `huri-module-emo` — EMO (prosody emotion) and EAG (its aggregator)
+  - `huri-module-rag` — RAG, QAG (question aggregator), `ingestion`,
+    `semantic_chunker`, `qdrant_utils`, memory maintenance/inspection
+  - `huri-module-mov` — MOV (gestures) + the vendored `emage` model code
+  - `huri-module-tts-piper` — `tts`, the default engine (Piper, ONNX, any CPU)
+  - `huri-module-tts-cosyvoice` — `tts_cosyvoice` (CosyVoice3 voice cloning,
+    NVIDIA); wire it instead of `tts`
+- **packages/huri-tts** — `StreamingTTS`, the engine-agnostic half both TTS
+  modules share (a library, registers no module)
+
+## Modules as plugins
+
+The server finds modules and events through Python entry points, so any
+installed package can provide them; nothing has to be added to this repo.
+HuRI's own modules are registered the same way, in `pyproject.toml`, which is
+why HuRI must be installed (`pip install -e .`, done by the installer and the
+images) and not just checked out.
+
+```toml
+[project.entry-points."huri.modules"]
+servo = "huri_servo.module:Servo"          # usable as `name: servo`
+
+[project.entry-points."huri.events"]
+"acme.servo_angles" = "huri_servo.events:ServoAngles"
+```
+
+Event topics are namespaced, `<namespace>.<name>`. The curated topics are
+`huri.audio.in`, `huri.audio.out`, `huri.voice`, `huri.transcript`,
+`huri.emotion`, `huri.partial_question`, `huri.question`, `huri.token` and
+`huri.motion`, registered by `huri-events` (packages/huri-events), which owns
+the `huri.` namespace; core itself defines no concrete event. Any other package
+registers its topics under a single namespace of its own (`acme.*`), which no
+other package may use — so a replacement event (`acme.motion`) can live next to
+the curated one instead of overriding it.
+
+`HURI_MODULES` is the server's allow-list, and it is **default-deny**: unset or
+empty, the server enables no module and rejects every session, because any
+installed package can register one. List each module explicitly
+(`HURI_MODULES=vad,stt,tag,qag,rag`); the installer and the shipped serve
+configs do.
+
+A module that can **move hardware** declares it (`requires.actuation = true` in
+its manifest, or `actuation = True` on its class), and the server refuses to
+start with it enabled unless its operator also lists it in
+`HURI_ACTUATION_MODULES` — a separate, explicit consent, independent of
+`HURI_MODULES` and of any verified mark. Active actuation modules are logged as
+a warning at startup. A module that is not packaged at all can be tried by import path:
+list it in `HURI_MODULES` (`HURI_MODULES=stt,my_pkg.servo:Servo`) and reference
+it from the client config with `module: my_pkg.servo:Servo` instead of `name:`.
+A client can never make the server import a path the server did not list.
+
+### Finding modules: `huri hub`
+
+```sh
+huri hub search gesture             # GitHub repositories tagged `huri-module`
+huri hub list                       # modules supporting the installed huri-core
+huri hub list --verified            # only the curated registry (huri-modules)
+huri hub list --core 0.5.0 --all    # another version; --all keeps unsupported ones
+huri hub install stt                # pip-installs a verified module; never enables it
+huri hub install servo --community  # an unreviewed one: only when asked explicitly
+```
+
+`list` merges the verified registry with community modules, read from their
+`pyproject.toml` and `huri_module.toml` on GitHub without installing them, and
+keeps those whose manifest supports the huri-core version. Nothing found is
+ever loaded: enabling a module stays the server operator's `HURI_MODULES`
+decision. `GITHUB_TOKEN` raises GitHub's rate limit; `--registry` (or
+`HURI_REGISTRY`) points at another `registry.toml`. Outside a checkout, the
+registry is read from — and verified modules installed from — one git ref of
+the HuRI repository: the release tag of the installed huri-core, `dev` for a
+development build, or `HURI_REF`. It needs `huri-core[client]`.
+
+### Module manifest (`huri_module.toml`)
+
+A module package ships one `huri_module.toml` per module, next to its code, so
+tooling can reason about the module without importing it:
+
+```toml
+name = "servo"                     # its huri.modules entry point name
+summary = "Gesture to servo angle arrays"
+input = { topic = "huri.motion", event = "huri_events.motion:Motion" }
+output = { topic = "acme.servo_angles", event = "huri_events_servo:ServoAngles" }  # omit for a terminal module
+events = ["huri-events>=0.1,<0.2", "huri-events-servo>=0.1,<0.2"]                  # optional
+requires = { gpu = false, actuation = false }                                      # optional
+huri_core = ">=0.4,<0.5"
+```
+
+At startup the server checks every enabled module that has one: its topics and
+event classes must match the module class, and the installed `huri-core` and
+event packages must be in the declared ranges — otherwise it refuses to start
+and says which. (`huri_core/core/manifest.py` is the reference parser; an
+unpackaged module's manifest sits next to its code and is named after its class,
+lowercased.)
+
+## Client SDK
+
+`huri_core.core.client.HuRIClient` (`pip install "huri-core[client]"`) is all a
+use case needs to talk to a server: it owns the websocket, the session
+handshake and the wire encoding, and calls your handlers.
+
+```python
+from huri_core.core.client import HuRIClient
+from huri_events.question import RAGQuestion
+from huri_events.speech import Transcript
+from huri_events.text import Token
+
+
+async def print_token(token: Token) -> None:
+    print(token.text, end="", flush=True)
+
+
+client = HuRIClient(
+    "ws://localhost:8000/session",
+    modules={"rag": {"name": "rag"}},
+    sends=["huri.question"],
+)
+client.on("huri.token", Token, print_token)  # before connecting
+async with client:
+    await client.send("huri.question", RAGQuestion(Transcript("Hello!", True), None))
+    await client.wait_closed()
+```
+
+Handlers of one topic run in arrival order; different topics run concurrently.
+A client YAML (`config/client_*.yaml`) holds the same three things — `modules`,
+`send` and `subscribe` — and the reference CLI ([examples/cli](examples/cli),
+`huri-cli --config ...`) adds its device settings under `cli:`.
 
 ## Developper Documentation
 

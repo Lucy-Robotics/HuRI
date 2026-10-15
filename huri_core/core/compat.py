@@ -1,0 +1,216 @@
+"""Compatibility checks between modules, event packages and a session.
+
+Two moments:
+  - at startup, `check_modules` verifies that every topic an enabled module
+    consumes or produces is registered by an installed event package, with the
+    event class the module expects;
+  - per session, `check_session` verifies that every module input has a
+    producer (another module, or the client) and that every topic the client
+    subscribes to is emitted by the pipeline.
+
+Each reports all problems at once, in plain sentences, instead of letting the
+pipeline start and silently drop events.
+"""
+
+from importlib.metadata import PackageNotFoundError, version
+from typing import Callable, Dict, Iterable, List, Optional, Type
+
+from .events import EventData
+from .manifest import ModuleManifest
+from .module import Module
+from .plugins import CURATED_NAMESPACE, topic_namespace
+
+
+class CompatibilityError(ValueError):
+    """Modules, events and session config do not fit together."""
+
+    def __init__(self, problems: List[str]):
+        self.problems = problems
+        super().__init__("\n".join(f"- {p}" for p in problems))
+
+
+def _qualname(cls: type) -> str:
+    return f"{cls.__module__}:{cls.__qualname__}"
+
+
+def missing_package_hint(topic: str) -> str:
+    """The event package that most likely provides a topic."""
+
+    namespace = topic_namespace(topic)
+    if namespace == CURATED_NAMESPACE:
+        return "huri-events (the curated events)"
+    return f"the event package of the {namespace!r} namespace"
+
+
+def check_modules(
+    modules: Dict[str, Type[Module]], events: Dict[str, Type[EventData]]
+) -> None:
+    """Every enabled module's topics are registered, with the expected class."""
+
+    problems: List[str] = []
+    for name, cls in sorted(modules.items()):
+        roles = (
+            ("consumes", cls.input_type, cls.input_event),
+            ("produces", cls.output_type, cls.output_event),
+        )
+        for role, topic, expected in roles:
+            if topic is None:
+                continue
+            registered: Optional[Type[EventData]] = events.get(topic)
+            if registered is None:
+                problems.append(
+                    f"module {name!r} {role} {topic!r}, but no installed event "
+                    f"package registers that topic: install "
+                    f"{missing_package_hint(topic)}."
+                )
+            elif expected is not None and registered is not expected:
+                problems.append(
+                    f"module {name!r} {role} {topic!r} as {_qualname(expected)}, "
+                    f"but the installed event package registers "
+                    f"{_qualname(registered)} for it: the module and the event "
+                    "package are not compatible versions."
+                )
+    if problems:
+        raise CompatibilityError(problems)
+
+
+def check_session(
+    pipeline: List[Module], sent: Iterable[str], subscribed: Iterable[str]
+) -> None:
+    """The session's wiring is complete.
+
+    :sent: topics the client publishes to the server.
+    :subscribed: topics the client wants to receive.
+    """
+
+    sent = set(sent)
+    produced = {m.output_type for m in pipeline if m.output_type is not None}
+    names = sorted(type(m).__name__ for m in pipeline)
+    problems: List[str] = []
+
+    for module in pipeline:
+        if module.input_type not in produced and module.input_type not in sent:
+            problems.append(
+                f"{type(module).__name__} consumes {module.input_type!r}, but "
+                "nothing in this session produces it: add a module that emits "
+                "it, or have the client send it."
+            )
+
+    unknown = sorted({t for t in subscribed if t not in produced})
+    if unknown:
+        problems.append(
+            f"hook topic(s) {unknown} are not emitted by any module in this "
+            f"session's pipeline ({names}). Subscribable topics: {sorted(produced)}"
+        )
+    if problems:
+        raise CompatibilityError(problems)
+
+
+def _installed_version(dist: str) -> Optional[str]:
+    try:
+        return version(dist)
+    except PackageNotFoundError:
+        return None
+
+
+def check_manifests(
+    modules: Dict[str, Type[Module]],
+    manifests: Dict[str, ModuleManifest],
+    events: Dict[str, Type[EventData]],
+    installed_version: Callable[[str], Optional[str]] = _installed_version,
+) -> None:
+    """A module's manifest agrees with its class, and the installed huri-core
+    and event packages are in the ranges it was built against."""
+
+    from packaging.requirements import Requirement
+    from packaging.specifiers import SpecifierSet
+
+    problems: List[str] = []
+    for name, manifest in sorted(manifests.items()):
+        cls = modules.get(name)
+        if cls is None:
+            continue
+        where = f"module {name!r} ({manifest.source})"
+
+        ports = (
+            ("input", manifest.input, cls.input_type, cls.input_event),
+            ("output", manifest.output, cls.output_type, cls.output_event),
+        )
+        for role, port, topic, declared in ports:
+            if port is None:
+                if topic is not None:
+                    problems.append(
+                        f"{where}: the manifest has no {role}, the module "
+                        f"produces {topic!r}"
+                    )
+                continue
+            if port.topic != topic:
+                problems.append(
+                    f"{where}: the manifest's {role} topic is {port.topic!r}, the "
+                    f"module's is {topic!r}"
+                )
+            actual = declared or events.get(port.topic)
+            if actual is not None and _qualname(actual) != port.event:
+                problems.append(
+                    f"{where}: the manifest's {role} event is {port.event}, but "
+                    f"{_qualname(actual)} is what carries {port.topic!r}"
+                )
+
+        core = installed_version("huri-core")
+        if core is not None and not SpecifierSet(manifest.huri_core).contains(
+            core, prereleases=True
+        ):
+            problems.append(
+                f"{where} supports huri-core {manifest.huri_core}, but {core} is "
+                "installed"
+            )
+        for raw in manifest.events:
+            requirement = Requirement(raw)
+            got = installed_version(requirement.name)
+            if got is None:
+                problems.append(f"{where} needs {raw}, which is not installed")
+            elif not requirement.specifier.contains(got, prereleases=True):
+                problems.append(f"{where} needs {raw}, but {got} is installed")
+    if problems:
+        raise CompatibilityError(problems)
+
+
+def actuating_modules(
+    modules: Dict[str, Type[Module]], manifests: Dict[str, ModuleManifest]
+) -> List[str]:
+    """Modules declaring they can drive hardware: `actuation = True` on the
+    class, or `requires.actuation = true` in the manifest."""
+
+    return sorted(
+        name
+        for name, cls in modules.items()
+        if cls.actuation or (name in manifests and manifests[name].actuation)
+    )
+
+
+def check_actuation(
+    modules: Dict[str, Type[Module]],
+    manifests: Dict[str, ModuleManifest],
+    opted_in: Iterable[str],
+) -> List[str]:
+    """Refuse to load an actuation module its operator did not opt in to.
+
+    :opted_in: the HURI_ACTUATION_MODULES list, separate from HURI_MODULES
+        and from any verified mark: enabling a module is not consenting to it
+        moving hardware.
+    Returns the actuation modules that will run.
+    """
+
+    actuating = actuating_modules(modules, manifests)
+    allowed = set(opted_in)
+    missing = [name for name in actuating if name not in allowed]
+    if missing:
+        raise CompatibilityError(
+            [
+                f"module {name!r} can drive physical hardware (actuation): the "
+                "server's operator must opt in explicitly by listing it in "
+                "HURI_ACTUATION_MODULES, in addition to HURI_MODULES"
+                for name in missing
+            ]
+        )
+    return actuating

@@ -1,0 +1,2 @@
+# Exact pins for AMD/ROCm machines (torch itself comes from AMD's wheels), e.g.:
+#   transformers==4.46.3

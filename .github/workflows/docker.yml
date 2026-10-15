@@ -1,0 +1,82 @@
+# The deploy images. On every pull request touching what goes into them, the
+# base image is built and a real session runs against it; the GPU images
+# (tens of GB of CUDA/ROCm wheels) are built on demand only.
+#
+# Building an image already checks HuRI's own side: deploy/install_huri.sh
+# fails the build if a module or event does not load, or if the installed
+# versions do not satisfy the modules' manifests.
+name: Docker images
+
+on:
+  pull_request:
+    paths:
+      - "deploy/**"
+      - "packages/**"
+      - "huri_core/**"
+      - "pyproject.toml"
+      - "*requirements*.txt"
+      - "constraints.txt"
+      - ".dockerignore"
+      - ".github/workflows/docker.yml"
+  workflow_dispatch:
+    inputs:
+      gpu_images:
+        description: "Also build the nvidia and amd images"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docker-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  base:
+    name: base image + session smoke test
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: build deploy/Dockerfile.base
+        run: docker build -f deploy/Dockerfile.base -t huri:ci-base .
+      - name: start HuRI in the image (tag + qag, no model needed)
+        run: |
+          docker run -d --name huri --shm-size=2g -p 127.0.0.1:8000:8000 \
+            -e HURI_MODULES=tag,qag -e RAY_USAGE_STATS_ENABLED=0 huri:ci-base \
+            python -c "import ray; from ray import serve; from huri_core.app import build_app; ray.init(); serve.start(http_options={'host': '0.0.0.0'}); serve.run(build_app(), name='HuRI', blocking=True)"
+          for i in $(seq 120); do
+            docker logs huri 2>&1 | grep -q 'is ready at' && exit 0
+            docker logs huri 2>&1 | grep -q Traceback && break
+            sleep 2
+          done
+          docker logs huri; exit 1
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: a client session through the SDK
+        run: |
+          pip install websockets omegaconf numpy
+          pip install --no-deps . ./packages/huri-events
+          python deploy/smoke_session.py ws://127.0.0.1:8000/session
+      - if: failure()
+        run: docker logs huri || true
+
+  gpu:
+    name: ${{ matrix.target }} image (build only)
+    if: github.event_name == 'workflow_dispatch' && inputs.gpu_images
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [nvidia, amd]
+    steps:
+      - name: free disk space (the CUDA/ROCm stacks need most of it)
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          docker system prune -af
+          df -h /
+      - uses: actions/checkout@v4
+      - run: docker build -f deploy/Dockerfile.${{ matrix.target }} -t huri:ci-${{ matrix.target }} .

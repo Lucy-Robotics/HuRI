@@ -1,0 +1,7 @@
+name = "rag"
+summary = "Answers questions from memory with an LLM, streaming tokens"
+input = { topic = "huri.question", event = "huri_events.question:RAGQuestion" }
+output = { topic = "huri.token", event = "huri_events.text:Token" }
+events = ["huri-events>=0.1,<0.2"]
+requires = { gpu = false, actuation = false }
+huri_core = ">=0.4.0.dev0,<0.5"

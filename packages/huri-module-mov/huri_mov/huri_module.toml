@@ -1,0 +1,7 @@
+name = "mov"
+summary = "Generates SMPL-X gestures matching the speech (EMAGE)"
+input = { topic = "huri.audio.out", event = "huri_events.audio:Audio" }
+output = { topic = "huri.motion", event = "huri_events.motion:Motion" }
+events = ["huri-events>=0.1,<0.2"]
+requires = { gpu = true, actuation = false }
+huri_core = ">=0.4.0.dev0,<0.5"

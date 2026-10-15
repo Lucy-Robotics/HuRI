@@ -1,0 +1,96 @@
+# The curated HuRI modules (tier 3). Being listed here is what "verified"
+# means: the entry was reviewed in a pull request to this file, and CI checks
+# it (check_registry.py) on every change. See ACCEPTANCE.md for what a listing
+# requires, and README.md for how this directory becomes its own repository.
+#
+# `source` is where the reviewed code is: today a directory of the HuRI repo;
+# once the packages live in their own repositories, a git submodule under
+# modules/<name>, pinned at a tag: source = { submodule = "modules/stt", tag = "v0.1.0" }
+
+schema = 1
+
+[[events]]
+package = "huri-events"
+namespace = "huri"
+source = { path = "packages/huri-events" }
+verified = 2026-10-12
+
+[[module]]
+name = "emo"
+package = "huri-module-emo"
+summary = "Estimates the emotion of speech from its prosody"
+huri_core = ">=0.4.0.dev0,<0.5"
+verified = 2026-10-12
+source = { path = "packages/huri-module-emo" }
+
+[[module]]
+name = "eag"
+package = "huri-module-emo"
+summary = "Aggregates emotion estimates over an utterance"
+huri_core = ">=0.4.0.dev0,<0.5"
+verified = 2026-10-12
+source = { path = "packages/huri-module-emo" }
+
+[[module]]
+name = "mov"
+package = "huri-module-mov"
+summary = "Generates SMPL-X gestures matching the speech (EMAGE)"
+huri_core = ">=0.4.0.dev0,<0.5"
+verified = 2026-10-12
+source = { path = "packages/huri-module-mov" }
+
+[[module]]
+name = "rag"
+package = "huri-module-rag"
+summary = "Answers questions from memory with an LLM, streaming tokens"
+huri_core = ">=0.4.0.dev0,<0.5"
+verified = 2026-10-12
+source = { path = "packages/huri-module-rag" }
+
+[[module]]
+name = "qag"
+package = "huri-module-rag"
+summary = "Joins a transcript and its emotion into a question"
+huri_core = ">=0.4.0.dev0,<0.5"
+verified = 2026-10-12
+source = { path = "packages/huri-module-rag" }
+
+[[module]]
+name = "stt"
+package = "huri-module-stt"
+summary = "Transcribes speech with faster-whisper (CPU or GPU)"
+huri_core = ">=0.4.0.dev0,<0.5"
+verified = 2026-10-12
+source = { path = "packages/huri-module-stt" }
+
+[[module]]
+name = "tag"
+package = "huri-module-tag"
+summary = "Stitches overlapping transcript passes into one sentence"
+huri_core = ">=0.4.0.dev0,<0.5"
+verified = 2026-10-12
+source = { path = "packages/huri-module-tag" }
+
+[[module]]
+name = "tts_cosyvoice"
+package = "huri-module-tts-cosyvoice"
+summary = "Speaks the reply in a cloned voice with CosyVoice3"
+huri_core = ">=0.4.0.dev0,<0.5"
+verified = 2026-10-12
+source = { path = "packages/huri-module-tts-cosyvoice" }
+
+[[module]]
+name = "tts"
+package = "huri-module-tts-piper"
+summary = "Speaks the reply with Piper (ONNX, CPU, ~30x realtime)"
+huri_core = ">=0.4.0.dev0,<0.5"
+verified = 2026-10-12
+source = { path = "packages/huri-module-tts-piper" }
+
+[[module]]
+name = "vad"
+package = "huri-module-vad"
+summary = "Detects speech in microphone frames (WebRTC VAD)"
+huri_core = ">=0.4.0.dev0,<0.5"
+verified = 2026-10-12
+source = { path = "packages/huri-module-vad" }
