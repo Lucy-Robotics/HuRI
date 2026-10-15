@@ -1,12 +1,13 @@
 import json
 import struct
 import uuid
-from typing import Dict, List, Type
+from typing import Any, Dict, Iterable, List, Type
 
 from fastapi import WebSocket, WebSocketDisconnect
 from ray import serve
 from ray.serve import handle
 
+import huri_core
 from huri_core.core.compat import check_session
 from huri_core.core.factory import EventData, EventDataFactory, Module, ModuleFactory
 from huri_core.core.plugins import installed_modules
@@ -35,7 +36,11 @@ class HuRI:
         modules: Dict[str, Type[Module]],
         handles: Dict[str, handle.DeploymentHandle],
         events: Dict[str, Type[EventData]],
+        actuating: Iterable[str] = (),
     ) -> None:
+        """:actuating: the enabled modules that may drive hardware, as the
+        startup checks found them (class attribute or manifest, and opted in).
+        Only reported by GET /modules: the checks already ran in build_app()."""
         self.module_factory = ModuleFactory(handles, installed=installed_modules())
         self.event_factory = EventDataFactory()
         for name, module_cls in modules.items():
@@ -49,6 +54,43 @@ class HuRI:
             self.event_factory.register(module_cls.output_type, event_cls)
 
         self.clients: Dict[str, Session] = {}
+
+        # Fixed at startup: GET /modules only reads it, it never imports or
+        # instantiates a module.
+        actuating = set(actuating)
+        self.modules_info: Dict[str, Any] = {
+            "modules": self.module_factory.registered(),
+            "details": {
+                name: {
+                    "input": module_cls.input_type,
+                    "output": module_cls.output_type,
+                    "actuation": name in actuating,
+                }
+                for name, module_cls in sorted(modules.items())
+            },
+            "huri_core": huri_core.__version__,
+        }
+
+    @app.get("/modules")
+    async def list_modules(self) -> Dict[str, Any]:
+        """
+        The modules this server enabled (HURI_MODULES), for a client to build
+        its handshake from:
+
+            {
+                "modules": ["stt", "vad"],
+                "details": {
+                    "stt": {"input": "huri.voice", "output": "huri.transcript",
+                            "actuation": false},
+                    ...
+                },
+                "huri_core": "0.4.0"
+            }
+
+        `output` is null for a module that emits nothing; `actuation` is true
+        for a module that may drive hardware (opted in by its operator).
+        """
+        return self.modules_info
 
     @app.websocket("/session")
     async def run_session(self, ws: WebSocket):

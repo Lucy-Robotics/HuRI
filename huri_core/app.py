@@ -58,7 +58,9 @@ def build_app() -> Application:
             actuating,
         )
     handles = bind_deployment_handles(modules)
-    app: Application = HuRI.bind(modules, handles, events)  # type: ignore[attr-defined]
+    app: Application = HuRI.bind(  # type: ignore[attr-defined]
+        modules, handles, events, actuating
+    )
     return app
 
 

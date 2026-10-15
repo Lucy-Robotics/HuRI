@@ -235,6 +235,30 @@ uses it as its `import_path` and sets `HURI_MODULES` (and
 `HURI_ACTUATION_MODULES`) in its `runtime_env.env_vars`, for `serve deploy`.
 The session endpoint is `ws://<host>:8000/session`.
 
+### Server HTTP API
+
+Next to the websocket, on the same origin, the server answers
+`GET /modules` (read-only, no auth, like `/session`): the modules it enabled,
+so a client can build its handshake, or check it, before connecting.
+
+```json
+{
+  "modules": ["shout"],
+  "details": {
+    "shout": {"input": "echo.text", "output": "echo.loud", "actuation": false}
+  },
+  "huri_core": "0.4.0"
+}
+```
+
+`modules` is the sorted `HURI_MODULES` allow-list after filtering, the same
+list a rejected session gets as `server_modules`; an installed but disabled
+module is not in it. `details` gives each module's input and output topics
+(`output` is `null` for a module that emits nothing) and whether it may drive
+hardware (`actuation`, as the startup checks found it, from the class or its
+manifest). `huri_core` is the server's huri-core version. The answer is fixed
+at startup: the route loads and instantiates nothing.
+
 ### Client SDK
 
 `huri_core.core.client.HuRIClient` (`huri-core[client]`) owns the websocket,

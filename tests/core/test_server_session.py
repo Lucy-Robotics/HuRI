@@ -150,3 +150,125 @@ def test_a_malformed_handshake_gets_a_session_error():
     for handshake_ in (json.JSONDecodeError("bad", "x", 0), ["not", "an", "object"]):
         ws = session(FakeSocket(handshake_))
         assert ws.sent[0]["type"] == "session_error" and ws.closed == 1008
+
+
+class Servo(Module):
+    input_type, output_type = "toy.word", None
+    actuation = True
+
+    async def process(self, data: Word):
+        return None
+
+
+def get(server, path: str):
+    """GET `path` on a FastAPI app routing to `server`'s endpoints, through ASGI:
+    status and decoded JSON body."""
+
+    from fastapi import FastAPI
+
+    api = FastAPI()
+    api.add_api_route("/modules", server.list_modules, methods=["GET"])
+    scope = {
+        "type": "http",
+        "asgi": {"version": "3.0"},
+        "http_version": "1.1",
+        "method": "GET",
+        "scheme": "http",
+        "path": path,
+        "raw_path": path.encode(),
+        "root_path": "",
+        "query_string": b"",
+        "headers": [(b"host", b"testserver")],
+        "client": ("testclient", 1),
+        "server": ("testserver", 80),
+    }
+    messages = []
+
+    async def receive():
+        return {"type": "http.request", "body": b"", "more_body": False}
+
+    async def send(message):
+        messages.append(message)
+
+    asyncio.run(api(scope, receive, send))
+    status = messages[0]["status"]
+    body = b"".join(m.get("body", b"") for m in messages[1:])
+    return status, json.loads(body)
+
+
+def test_the_ingress_declares_get_modules():
+    from huri_core.core.app import app
+
+    def routes(router):
+        for route in router.routes:
+            inner = getattr(route, "original_router", None)  # an included router
+            if inner is not None:
+                yield from routes(inner)
+            else:
+                yield route.path, tuple(sorted(getattr(route, "methods", None) or ()))
+
+    assert ("/modules", ("GET",)) in set(routes(app))
+
+
+def test_get_modules_lists_the_enabled_modules_their_topics_and_actuation():
+    import huri_core
+
+    server = Server(
+        {"upper": Upper, "reverse": Reverse, "servo": Servo},
+        {},
+        dict(EVENTS),
+        actuating=["servo"],
+    )
+    status, body = get(server, "/modules")
+    assert status == 200
+    assert body == {
+        "modules": ["reverse", "servo", "upper"],
+        "details": {
+            "reverse": {
+                "input": "toy.chunk",
+                "output": "toy.reversed",
+                "actuation": False,
+            },
+            "servo": {"input": "toy.word", "output": None, "actuation": True},
+            "upper": {"input": "toy.word", "output": "toy.loud", "actuation": False},
+        },
+        "huri_core": huri_core.__version__,
+    }
+    # The same names a rejected session is told about.
+    ws = session(FakeSocket(handshake({"a": {"name": "stt"}}, [], ["toy.word"])))
+    assert ws.sent[0]["server_modules"] == ["reverse", "upper"]
+
+
+def test_get_modules_leaves_out_installed_but_disabled_modules(monkeypatch):
+    import huri_core.core.huri as huri_module
+
+    monkeypatch.setattr(huri_module, "installed_modules", lambda: ["upper", "tts"])
+    server = Server({"upper": Upper}, {}, dict(EVENTS))
+    _, body = get(server, "/modules")
+    assert body["modules"] == ["upper"]
+    assert list(body["details"]) == ["upper"]
+
+
+def test_get_modules_imports_nothing(monkeypatch):
+    """Answered from what the server registered at startup: no entry point is
+    loaded, no module instantiated."""
+
+    import huri_core.core.huri as huri_module
+    import huri_core.core.plugins as plugins
+
+    server = Server({"upper": Upper}, {}, dict(EVENTS))
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("GET /modules must not load or build a module")
+
+    for target, name in [
+        (plugins, "load_modules"),
+        (plugins, "load_events"),
+        (plugins, "installed_modules"),
+        (huri_module, "installed_modules"),
+    ]:
+        monkeypatch.setattr(target, name, forbidden)
+    monkeypatch.setattr(server.module_factory, "create", forbidden)
+    monkeypatch.setattr(Upper, "__init__", forbidden)
+    status, body = get(server, "/modules")
+    assert status == 200 and body["modules"] == ["upper"]
