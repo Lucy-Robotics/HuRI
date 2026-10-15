@@ -81,8 +81,8 @@ python -c "import huri_core; print(huri_core.__version__)"
 [huri-modules](https://github.com/Lucy-Robotics/huri-modules) (the curated
 events, the curated modules, the registry and the install/deploy tooling) has
 its own semver and its own tags, also `X.Y.Z`. Each of its releases is a
-tested set built against one huri-core ref, the one in its `HURI_CORE_REF`
-file; its packages pin a huri-core minor range.
+tested set built against one huri-core ref, `HURI_CORE_REF` in its
+`versions.env` file; its packages pin a huri-core minor range.
 
 | huri-modules | huri-core |
 | ------------ | --------- |
@@ -108,6 +108,13 @@ Once `0.4.0` is tagged here, huri-modules moves `HURI_CORE_REF` from `dev` to
    huri-core `0.5.x`. Users of huri-core `0.4.x` keep using huri-modules
    `0.1.x` (`HURI_MODULES_REF=0.1.0` for `huri hub`), whose ranges keep pip
    from pairing it with the wrong core.
+
+Clients built on the SDK are not part of that set.
+[huri-cli](https://github.com/Lucy-Robotics/huri-cli), the reference client,
+has its own versions and tags; its CI runs against huri-core at its
+`HURI_CORE_REF` (default `dev`), and it moves its `huri-core[client]` range
+the same way once huri-core is tagged. huri-modules' installer pins the
+huri-cli ref it installs in `versions.env` (`HURI_CLI_REF`).
 
 Third-party modules follow the same path at their own pace: their
 `huri_core` range in `huri_module.toml` tells the server (at startup) and

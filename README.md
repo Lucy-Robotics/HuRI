@@ -16,6 +16,7 @@ tested with none installed.
 | understand HuRI as a whole                             | [Lucy-Robotics/HuRI-landing](https://github.com/Lucy-Robotics/HuRI-landing)                   |
 | run a real pipeline (STT, RAG, TTS, gestures...)       | [Lucy-Robotics/huri-modules](https://github.com/Lucy-Robotics/huri-modules)                   |
 | write a module                                         | [Lucy-Robotics/huri-plugin-template](https://github.com/Lucy-Robotics/huri-plugin-template)   |
+| write a client (a robot, a website, a CLI)             | [Lucy-Robotics/huri-cli](https://github.com/Lucy-Robotics/huri-cli), the reference client     |
 | build on the framework itself, or change it            | this repository                                                                               |
 
 ## Install
@@ -257,6 +258,9 @@ and does not stop the others. A refused session raises `HuRISessionError`
 this machine's `user_id`, created once and kept in the user config directory.
 huri-modules ships a commented
 [client_template.yaml](https://github.com/Lucy-Robotics/huri-modules/blob/main/config/client_template.yaml).
+[huri-cli](https://github.com/Lucy-Robotics/huri-cli), a separate repository,
+is a complete client built on this SDK (microphone, prompt, playback, gesture
+view): the reference use case to start your own from.
 
 ### Testing a module: `huri_core.testing`
 
@@ -423,6 +427,9 @@ release:
 
 huri-modules' CI also runs against huri-core's `dev`, so a breaking change here
 is seen there before it is released.
+Clients built on the SDK, such as
+[huri-cli](https://github.com/Lucy-Robotics/huri-cli), pin the same minor range
+of `huri-core[client]` and release on their own.
 
 ## Developing
 

@@ -14,7 +14,13 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 PAGES = ["README.md", "RELEASING.md"]
-REPOS = {"huri-core", "huri-modules", "huri-plugin-template", "HuRI-landing"}
+REPOS = {
+    "huri-core",
+    "huri-modules",
+    "huri-plugin-template",
+    "huri-cli",
+    "HuRI-landing",
+}
 OLD_NAME_DOCUMENTED_IN = {"RELEASING.md"}
 
 _LINK = re.compile(r"(?<!!)\[[^\]]*\]\(([^)\s]+)\)")
