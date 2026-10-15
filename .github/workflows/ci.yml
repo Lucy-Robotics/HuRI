@@ -97,5 +97,6 @@ jobs:
           files = [str(f) for f in md.files("huri-core")]
           stray = [f for f in files if f.startswith("tests/")]
           assert not stray, stray
+          assert "huri_core/py.typed" in files, "py.typed is not shipped"
           print("huri-core", huri_core.__version__, "-", len(files), "files")
           PY

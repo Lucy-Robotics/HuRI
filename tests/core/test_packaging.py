@@ -100,3 +100,12 @@ def test_extras_agree_with_constraint_pins():
             version = pins.get(canonicalize_name(req.name))
             if version and req.specifier:
                 assert version in req.specifier, f"[{extra}] {req} vs =={version}"
+
+
+def test_the_package_is_typed():
+    # PEP 561: without py.typed in the wheel, type checkers of an installed
+    # huri-core (huri-modules' CI) see it as untyped. CI's build job checks
+    # the wheel itself.
+    tool = loads_toml((ROOT / "pyproject.toml").read_text())["tool"]
+    assert (ROOT / "huri_core" / "py.typed").is_file()
+    assert "py.typed" in tool["setuptools"]["package-data"]["huri_core"]

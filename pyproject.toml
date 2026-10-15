@@ -50,7 +50,7 @@ dev = [
 huri = "huri_core.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/Lucy-Robotics/HuRI"
+Homepage = "https://github.com/Lucy-Robotics/HuRI-landing"
 Repository = "https://github.com/Lucy-Robotics/huri-core"
 Documentation = "https://github.com/Lucy-Robotics/huri-core#readme"
 Changelog = "https://github.com/Lucy-Robotics/huri-core/releases"
@@ -67,6 +67,11 @@ version = { attr = "huri_core.__version__" }
 
 [tool.setuptools.packages.find]
 include = ["huri_core*"]
+
+[tool.setuptools.package-data]
+# PEP 561: type checkers of projects that install huri-core (huri-modules' CI,
+# module authors) read its annotations.
+huri_core = ["py.typed"]
 
 [tool.black]
 line-length = 88
