@@ -20,7 +20,7 @@ concurrency:
 
 jobs:
   lint:
-    name: lint (black, isort, flake8, mypy)
+    name: lint (black, isort, flake8, mypy, links)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -31,10 +31,14 @@ jobs:
       - name: install the lint toolchain only
         # mypy has ignore_missing_imports, so it runs without Ray or FastAPI.
         run: pip install -c constraints.txt -e ".[dev]"
-      - run: black --check huri_core tests
-      - run: isort --check-only huri_core tests
-      - run: flake8 huri_core tests
-      - run: mypy huri_core --check-untyped-defs
+      - run: black --check huri_core scripts tests
+      - run: isort --check-only huri_core scripts tests
+      - run: flake8 huri_core scripts tests
+      - run: mypy huri_core scripts --check-untyped-defs
+      - name: links of README, CONTRIBUTING, RELEASING and docs/
+        # Offline: relative links and anchors, and every Lucy-Robotics URL
+        # names a known repository (not the old HuRI name, not HuRI-landing).
+        run: python scripts/check_links.py
 
   test:
     name: pytest (python ${{ matrix.python }})
