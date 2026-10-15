@@ -1,7 +1,8 @@
-"""Finding modules: the verified registry and the community, per huri-core version.
+"""Finding modules: the verified registry and the community.
 
 Two sources, merged by module name:
-  - the `huri-modules` registry (registry.toml): the curated, verified modules;
+  - the registry of the `huri-modules` repository (registry.toml): the
+    curated, verified modules;
   - GitHub repositories tagged `huri-module`, read without installing anything:
     their pyproject.toml (the `huri.modules` entry points) and each module's
     huri_module.toml (summary, supported huri-core range).
@@ -19,31 +20,42 @@ import urllib.parse
 import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple
 
 from .core.manifest import ManifestError, loads_manifest, loads_toml
 
 GITHUB_API = "https://api.github.com"
 RAW = "https://raw.githubusercontent.com/{repo}/{ref}/{path}"
-HURI_REPO = "Lucy-Robotics/HuRI"
-REGISTRY_PATH = "huri-modules/registry.toml"
+HURI_MODULES_REPO = "Lucy-Robotics/huri-modules"
+REGISTRY_PATH = "registry.toml"
+# What makes a directory a huri-modules checkout, besides its registry.
+CHECKOUT_MARKER = "check_registry.py"
 TOPIC = "huri-module"
 
 
-def huri_ref() -> str:
-    """The git ref of the HuRI repository the registry is read from and its
-    modules installed from — one ref for both, so what is installed is what
-    the registry describes. HURI_REF overrides; otherwise the release tag of
-    the installed huri-core, or `dev` for a development build."""
+def modules_ref() -> str:
+    """The git ref of huri-modules the registry is read from and its curated
+    modules installed from: one ref for both, so what is installed is what the
+    registry describes. HURI_MODULES_REF (a huri-modules release tag, e.g.
+    `0.1.0`, or a branch) overrides `main`, its latest release.
 
-    if os.environ.get("HURI_REF"):
-        return os.environ["HURI_REF"]
-    version = installed_core_version()
-    return "dev" if "dev" in version or "+" in version else version
+    huri-modules has its own versions, so this is not derived from the
+    installed huri-core; instead `list` and `install` check each module's
+    huri_core range against the installed huri-core."""
+
+    return os.environ.get("HURI_MODULES_REF") or "main"
 
 
 def default_registry() -> str:
-    return RAW.format(repo=HURI_REPO, ref=huri_ref(), path=REGISTRY_PATH)
+    return RAW.format(repo=HURI_MODULES_REPO, ref=modules_ref(), path=REGISTRY_PATH)
+
+
+def curated_install(path: str) -> str:
+    """pip target of a curated package, a directory of huri-modules."""
+    return (
+        f"git+https://github.com/{HURI_MODULES_REPO}.git@{modules_ref()}"
+        f"#subdirectory={path}"
+    )
 
 
 # url -> text, or None when the resource does not exist (HTTP 404).
@@ -94,41 +106,67 @@ class HubModule:
 
 
 def find_local_registry(start: Path) -> Optional[Path]:
-    """registry.toml of the HuRI checkout `start` is in, if any."""
+    """registry.toml of the huri-modules checkout `start` is in, if any."""
     for directory in [start, *start.parents]:
-        candidate = directory / "huri-modules" / "registry.toml"
-        if candidate.is_file():
+        candidate = directory / REGISTRY_PATH
+        if candidate.is_file() and (directory / CHECKOUT_MARKER).is_file():
             return candidate
     return None
 
 
+def _install_target(
+    name: str, source: Mapping[str, Any], checkout: Optional[Path]
+) -> Tuple[str, str]:
+    """(pip target, where it comes from) of a registry entry's `source`.
+
+    path = "packages/<pkg>": a curated package of huri-modules. From a local
+        checkout that has it, that directory; otherwise the huri-modules
+        repository at modules_ref().
+    git = "<url>", tag = "<tag>" (subdirectory = "<dir>" optional): a verified
+        third-party module, always installed at the reviewed tag. Its pinned
+        submodule (`submodule = "modules/<name>"`) is for huri-modules' own CI
+        and review, not needed here.
+    """
+
+    if "path" in source:
+        path = str(source["path"])
+        if checkout is not None and (checkout / path).is_dir():
+            return str(checkout / path), path
+        return curated_install(path), path
+    if "git" in source:
+        if not source.get("tag"):
+            raise HubError(f"registry entry {name!r}: a git source must pin a `tag`")
+        target = f"git+{source['git']}@{source['tag']}"
+        if source.get("subdirectory"):
+            target += f"#subdirectory={source['subdirectory']}"
+        return target, f"{source['git']}@{source['tag']}"
+    raise HubError(f"registry entry {name!r} has no `path` or `git` source")
+
+
 def load_registry(location: str, fetch: Fetch = http_fetch) -> List[HubModule]:
-    """The verified modules, from a registry.toml path or URL."""
+    """The verified modules, from a registry.toml path or URL, or a
+    huri-modules checkout directory."""
     is_url = location.startswith(("http://", "https://"))
-    text = fetch(location) if is_url else Path(location).read_text()
+    if not is_url and Path(location).is_dir():
+        location = str(Path(location) / REGISTRY_PATH)
+    text: Optional[str] = None
+    if is_url:
+        text = fetch(location)
+    elif Path(location).is_file():
+        text = Path(location).read_text()
     if text is None:
         raise HubError(f"no registry at {location}")
-    registry = loads_toml(text)
-    checkout = None if is_url else Path(location).resolve().parents[1]
+    try:
+        registry = loads_toml(text)
+    except ValueError as e:  # tomllib.TOMLDecodeError
+        raise HubError(f"{location} is not valid TOML: {e}") from e
+    checkout = None if is_url else Path(location).resolve().parent
 
     modules = []
     for entry in registry.get("module", []):
-        source = entry.get("source", {})
-        if "path" in source:
-            if checkout is not None:
-                install = str(checkout / source["path"])
-            else:
-                install = (
-                    f"git+https://github.com/{HURI_REPO}.git@{huri_ref()}"
-                    f"#subdirectory={source['path']}"
-                )
-            where = source["path"]
-        elif "git" in source:
-            ref = f"@{source['tag']}" if "tag" in source else ""
-            install = f"git+{source['git']}{ref}"
-            where = source["git"]
-        else:
-            install, where = entry.get("package", entry["name"]), "?"
+        install, where = _install_target(
+            entry["name"], entry.get("source", {}), checkout
+        )
         modules.append(
             HubModule(
                 name=entry["name"],
@@ -231,6 +269,8 @@ def installed_core_version() -> str:
 
 
 def _registry_location(option: Optional[str]) -> str:
+    """--registry, else HURI_REGISTRY, else the huri-modules checkout the
+    current directory is in, else huri-modules on GitHub at modules_ref()."""
     if option:
         return option
     if os.environ.get("HURI_REGISTRY"):
@@ -310,6 +350,19 @@ def cmd_install(args: Any, fetch: Fetch, out: Callable[[str], None]) -> int:
                     f"huri hub install {module.install}"
                 )
             out(f"{name}: community (not reviewed), from {module.source}")
+        core = installed_core_version()
+        if module.supports(core) is False:
+            # pip would otherwise "fix" it by replacing the installed huri-core.
+            hint = (
+                "Use the huri-modules release built for it (HURI_MODULES_REF="
+                f"<tag>, see https://github.com/{HURI_MODULES_REPO}#readme)"
+                if module.verified
+                else "Use a release of it built for that huri-core"
+            )
+            raise HubError(
+                f"{name!r} supports huri-core {module.huri_core}, but {core} is "
+                f"installed. {hint}, or install it by URL."
+            )
         target = module.install
     command = [sys.executable, "-m", "pip", "install", target]
     out("$ " + " ".join(command))
@@ -344,7 +397,9 @@ def main(argv: Optional[List[str]] = None, fetch: Fetch = http_fetch) -> int:
     p.add_argument("--verified", action="store_true", help="the registry only")
     p.add_argument("--all", action="store_true", help="also unsupported versions")
     p.add_argument("--no-crawl", action="store_true", help="skip GitHub")
-    p.add_argument("--registry", help="registry.toml path or URL")
+    p.add_argument(
+        "--registry", help="registry.toml path or URL, or a huri-modules checkout"
+    )
     p.set_defaults(run=cmd_list)
 
     p = sub.add_parser("install", help="pip-install a module (does not enable it)")
@@ -355,7 +410,9 @@ def main(argv: Optional[List[str]] = None, fetch: Fetch = http_fetch) -> int:
         action="store_true",
         help="allow a module that is not in the verified registry",
     )
-    p.add_argument("--registry", help="registry.toml path or URL")
+    p.add_argument(
+        "--registry", help="registry.toml path or URL, or a huri-modules checkout"
+    )
     p.set_defaults(run=cmd_install)
 
     args = parser.parse_args(argv)
