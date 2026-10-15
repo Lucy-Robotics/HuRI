@@ -110,6 +110,10 @@ class HuRIClient:
         has a producer, and send() refuses any other topic.
     :user_id: identity the server keeps per-user state under (RAG memory).
         A random one is used when omitted.
+    :connect_kwargs: extra options for ``websockets.connect`` (e.g. ``ssl`` for
+        a server with a private CA, ``additional_headers``). By default the
+        message size limit is lifted (``max_size=None``): audio and motion
+        frames can exceed the library's 1 MiB default.
     """
 
     def __init__(
@@ -118,8 +122,11 @@ class HuRIClient:
         modules: Mapping[str, Mapping[str, Any]],
         sends: Iterable[str] = (),
         user_id: Optional[str] = None,
+        connect_kwargs: Optional[Mapping[str, Any]] = None,
     ):
         self.url = url
+        self.connect_kwargs: Dict[str, Any] = {"max_size": None}
+        self.connect_kwargs.update(connect_kwargs or {})
         self.modules = {k: dict(v) for k, v in modules.items()}
         self.sends = list(sends)
         self.user_id = user_id or str(uuid.uuid4())
@@ -173,7 +180,7 @@ class HuRIClient:
     # --- connection ---------------------------------------------------------
 
     async def connect(self) -> "HuRIClient":
-        ws = await websockets.connect(self.url)
+        ws = await websockets.connect(self.url, **self.connect_kwargs)
         try:
             await ws.send(json.dumps(self.handshake()))
             try:

@@ -171,3 +171,43 @@ def test_old_client_config_format_gets_a_migration_hint():
     legacy = {"user_id": "u", "interface_path": "x:y", "senders": {}, "hooks": {}}
     with pytest.raises(ValueError, match="subscribe.*send"):
         ClientConfig.from_dict(legacy)
+
+
+def test_connect_kwargs_reach_websockets_and_lift_the_size_limit(monkeypatch):
+    seen = {}
+
+    async def fake_connect(url, **kwargs):
+        seen.update(kwargs, url=url)
+        raise ConnectionRefusedError("stop here")
+
+    monkeypatch.setattr(websockets, "connect", fake_connect)
+    with pytest.raises(ConnectionRefusedError):
+        run(HuRIClient("ws://x", modules={}).connect())
+    assert seen == {"url": "ws://x", "max_size": None}
+
+    seen.clear()
+    with pytest.raises(ConnectionRefusedError):
+        client = HuRIClient(
+            "wss://x", modules={}, connect_kwargs={"max_size": 2**20, "ssl": "ctx"}
+        )
+        run(client.connect())
+    assert seen == {"url": "wss://x", "max_size": 2**20, "ssl": "ctx"}
+
+
+def test_a_frame_larger_than_one_mib_is_received():
+    big = "x" * (2 * 2**20)
+
+    async def scenario():
+        async with FakeHuRI(outgoing=[encode("toy.token", Text(big))]) as server:
+            got = []
+            client = HuRIClient(server.url, modules={})
+            client.on("toy.token", Text, lambda e: _append(got, e))
+            async with client:
+                await until(lambda: got)
+            return got
+
+    assert run(scenario())[0].text == big
+
+
+async def _append(target, item):
+    target.append(item)
