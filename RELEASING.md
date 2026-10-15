@@ -16,6 +16,8 @@ version would be wrong on `dev`.
 `huri-core` follows semver. While the major version is `0`, a **minor** bump
 (`0.3` → `0.4`) may break the public surface and a **patch** bump must not.
 Third-party modules and event packages therefore pin `huri-core>=0.X,<0.(X+1)`.
+Before `0.X.0` is tagged, the lower bound is `0.X.0.dev0` (`>=0.4.0.dev0,<0.5`
+today): a `.devN` build is a pre-release below `0.X`, which `>=0.X` excludes.
 
 Public surface, i.e. what a breaking change is measured against:
 
@@ -40,17 +42,24 @@ Repository maintainers (admins of the `Lucy-Robotics/huri-core` repository)
 cut releases:
 
 1. Open a release PR on `dev` that sets `__version__` to the release version
-   (drop the `.devN` suffix) and summarizes the changes.
+   (drop the `.devN` suffix) and summarizes the changes. On a minor release,
+   it also turns the documented ranges (README's examples and Versioning
+   section) from `>=0.X.0.dev0,<0.(X+1)` into `>=0.X,<0.(X+1)`.
 2. Merge it, then merge `dev` into `main` with a PR named `Release X.Y.Z`.
 3. Tag `main`'s merge commit `X.Y.Z` (no `v` prefix, like `0.2.0` and `0.3.0`)
    and push the tag. Publish a GitHub release for it: its notes are the
    changelog, and they say what breaks for modules on a minor release.
 4. On `dev`, bump `__version__` to the next `X.(Y+1).0.dev0`.
 
-This repository was `Lucy-Robotics/HuRI` before the split; that name now
-belongs to the code-free showcase, so GitHub does not redirect it and install
-strings must use `Lucy-Robotics/huri-core`. The earlier tags came with the
-history; the first release as `huri-core` is `0.4.0`.
+This repository was renamed from `Lucy-Robotics/HuRI` to
+`Lucy-Robotics/huri-core` at the split. The name `HuRI` is never reused (the
+showcase lives at
+[Lucy-Robotics/HuRI-landing](https://github.com/Lucy-Robotics/HuRI-landing)),
+so GitHub keeps redirecting old clones, remotes and
+`git+https://github.com/Lucy-Robotics/HuRI.git` install strings to huri-core.
+New install strings, docs and git remotes must still use
+`Lucy-Robotics/huri-core`. The earlier tags came with the history; the first
+release as `huri-core` is `0.4.0`.
 
 ## Publishing
 

@@ -1,6 +1,6 @@
 # huri-core
 
-The framework of [HuRI](https://github.com/Lucy-Robotics/HuRI), a realtime,
+The framework of [HuRI](https://github.com/Lucy-Robotics/HuRI-landing), a realtime,
 modular conversational pipeline for robots and avatars: a multi-client server
 that runs, per client session, a pipeline of modules exchanging typed events.
 
@@ -12,7 +12,7 @@ built and tested with none installed.
 
 | You want to...                                         | Go to                                                                                         |
 | ------------------------------------------------------ | --------------------------------------------------------------------------------------------- |
-| understand HuRI as a whole                             | [Lucy-Robotics/HuRI](https://github.com/Lucy-Robotics/HuRI)                                   |
+| understand HuRI as a whole                             | [Lucy-Robotics/HuRI-landing](https://github.com/Lucy-Robotics/HuRI-landing)                   |
 | run a real pipeline (STT, RAG, TTS, gestures...)       | [Lucy-Robotics/huri-modules](https://github.com/Lucy-Robotics/huri-modules)                   |
 | write a module                                         | [Lucy-Robotics/huri-plugin-template](https://github.com/Lucy-Robotics/huri-plugin-template)   |
 | build on the framework itself, or change it            | this repository                                                                               |
@@ -40,8 +40,9 @@ The base install (no extra) has no dependency at all: the base classes and
 package.
 
 A **module author** depends on a huri-core range in the package's
-`pyproject.toml`, e.g. `"huri-core[server]>=0.4,<0.5"`, and installs huri-core
-from git first since pip cannot find it on an index. Modules that use the
+`pyproject.toml`, e.g. `"huri-core[server]>=0.4.0.dev0,<0.5"` (`>=0.4,<0.5`
+once `0.4.0` is tagged, see [Versioning](#versioning-and-compatibility)), and
+installs huri-core from git first since pip cannot find it on an index. Modules that use the
 curated `huri.*` topics also depend on `huri-events`, which lives in
 huri-modules:
 
@@ -204,7 +205,7 @@ input = { topic = "huri.motion", event = "huri_events.motion:Motion" }
 output = { topic = "acme.servo_angles", event = "huri_servo.events:ServoAngles" }  # omit for a terminal module
 events = ["huri-events>=0.1,<0.2"]               # optional
 requires = { gpu = false, actuation = false }    # optional
-huri_core = ">=0.4,<0.5"
+huri_core = ">=0.4.0.dev0,<0.5"
 ```
 
 (An unpackaged module's manifest sits next to its file, named after its class
@@ -284,7 +285,7 @@ huri hub search gesture             # GitHub repositories tagged `huri-module`
 huri hub list                       # modules supporting the installed huri-core
 huri hub list --verified            # only the curated registry of huri-modules
 huri hub list --core 0.5.0 --all    # another version; --all keeps unsupported ones
-huri hub install stt                # pip-installs a verified module; never enables it
+huri hub install stt                # pip-installs a verified module (and huri-events); never enables it
 huri hub install servo --community  # an unreviewed one: only when asked explicitly
 ```
 
@@ -292,8 +293,12 @@ huri hub install servo --community  # an unreviewed one: only when asked explici
 `pyproject.toml` and `huri_module.toml` on GitHub without installing anything,
 and keeps those whose manifest supports the huri-core version. `install`
 refuses a module whose range excludes the installed huri-core, rather than let
-pip replace it. Nothing found is ever loaded: enabling stays the operator's
-`HURI_MODULES` decision.
+pip replace it. The curated packages modules depend on by name (`huri-events`,
+and for a curated module the curated libraries it needs, such as `huri-tts`)
+are on no package index: `install` passes them to pip in the same command,
+from huri-modules at the module's ref, so pip never looks them up elsewhere.
+Nothing found is ever loaded: enabling stays the operator's `HURI_MODULES`
+decision.
 
 The registry is `registry.toml` of
 [huri-modules](https://github.com/Lucy-Robotics/huri-modules), read at the ref
@@ -301,8 +306,14 @@ The registry is `registry.toml` of
 `main` by default), and its curated modules are installed from that same ref.
 Inside a huri-modules checkout (a directory with `registry.toml` and
 `check_registry.py`), that checkout's registry and packages are used instead.
-`--registry PATH|URL` or `HURI_REGISTRY` points at any other registry.
-`GITHUB_TOKEN` raises GitHub's rate limit. `huri hub` needs
+`--registry PATH|URL` or `HURI_REGISTRY` points at any other registry. For
+huri-modules' own registry on GitHub
+(`https://raw.githubusercontent.com/Lucy-Robotics/huri-modules/<ref>/registry.toml`)
+the curated packages come from that `<ref>`; for any other location, those
+missing from it come from huri-modules at `HURI_MODULES_REF` (the hub says
+so). `list` and `install` print the registry they read on stderr, and warn
+when a setting is ignored (`HURI_MODULES_REF` inside a checkout, the old
+`HURI_REF`). `GITHUB_TOKEN` raises GitHub's rate limit. `huri hub` needs
 `huri-core[client]`.
 
 ## A minimal end to end example
@@ -395,7 +406,7 @@ From here:
 - **your own module**, with its manifest, events package, tests and CI:
   [huri-plugin-template](https://github.com/Lucy-Robotics/huri-plugin-template);
 - **the big picture** (architecture, contributing):
-  [HuRI](https://github.com/Lucy-Robotics/HuRI).
+  [HuRI-landing](https://github.com/Lucy-Robotics/HuRI-landing).
 
 ## Versioning and compatibility
 
@@ -403,7 +414,9 @@ huri-core follows semver with tags `X.Y.Z` (no `v` prefix); `dev` is the
 development branch, `main` the latest release. While huri-core is `0.x`, a
 **minor** release (`0.4` → `0.5`) may break the public surface and a patch
 release never does, so modules and event packages pin a minor range:
-`huri-core>=0.4,<0.5`. The public surface (base classes, client SDK and
+`huri-core>=0.4,<0.5`. Until `0.4.0` is tagged, use `>=0.4.0.dev0,<0.5`: the
+only installable huri-core is `dev` (`0.4.0.dev0`), a pre-release below `0.4`
+that `>=0.4` excludes. The public surface (base classes, client SDK and
 session schema, wire protocol, entry point groups, manifest) is listed in
 [RELEASING.md](RELEASING.md).
 
