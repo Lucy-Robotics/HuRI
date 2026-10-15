@@ -36,11 +36,14 @@ class HuRI:
         modules: Dict[str, Type[Module]],
         handles: Dict[str, handle.DeploymentHandle],
         events: Dict[str, Type[EventData]],
-        actuating: Iterable[str] = (),
+        actuating: Iterable[str],
     ) -> None:
         """:actuating: the enabled modules that may drive hardware, as the
         startup checks found them (class attribute or manifest, and opted in).
-        Only reported by GET /modules: the checks already ran in build_app()."""
+        Only reported by GET /modules: the checks already ran in build_app().
+        Required, not defaulted: a binder that forgot it would report a servo
+        as `actuation: false`. Informational only: the operator opt-in
+        (HURI_ACTUATION_MODULES) is the safety gate, never this flag."""
         self.module_factory = ModuleFactory(handles, installed=installed_modules())
         self.event_factory = EventDataFactory()
         for name, module_cls in modules.items():
@@ -88,7 +91,9 @@ class HuRI:
             }
 
         `output` is null for a module that emits nothing; `actuation` is true
-        for a module that may drive hardware (opted in by its operator).
+        for a module that may drive hardware (opted in by its operator), for
+        information only. `huri_core` is the PEP 440 version string (a dev
+        build reports e.g. "0.4.0.dev0").
         """
         return self.modules_info
 

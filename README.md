@@ -256,8 +256,20 @@ list a rejected session gets as `server_modules`; an installed but disabled
 module is not in it. `details` gives each module's input and output topics
 (`output` is `null` for a module that emits nothing) and whether it may drive
 hardware (`actuation`, as the startup checks found it, from the class or its
-manifest). `huri_core` is the server's huri-core version. The answer is fixed
-at startup: the route loads and instantiates nothing.
+manifest). `huri_core` is the server's huri-core version, as a PEP 440
+string: a dev build reports a pre-release such as `0.4.0.dev0`, so compare it
+with `packaging.version`, not as an exact string. The answer is fixed at
+startup: the route loads and instantiates nothing.
+
+`actuation` is informational. The only safety gate is the operator's opt-in
+(`HURI_ACTUATION_MODULES`, checked at startup): a client must never decide
+something is safe because a module reports `actuation: false`.
+
+Like `/session`, `/modules` has no auth, and it tells any caller the exact
+huri-core version and which enabled modules drive hardware. A public
+deployment (an InMoov or any robot reachable from the internet) should put
+both routes behind the website backend or a reverse proxy that authenticates,
+and not expose the HuRI server port directly.
 
 ### Client SDK
 
