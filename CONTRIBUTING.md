@@ -1,6 +1,6 @@
 # Contributing to HuRI
 
-HuRI is four repositories (see [HuRI ecosystem](README.md#huri-ecosystem)),
+HuRI spans several repositories (see [HuRI ecosystem](README.md#huri-ecosystem)),
 plus the use cases built on it; pick the line that matches what you want to
 change, and open the issue or pull request there.
 

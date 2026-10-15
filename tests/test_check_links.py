@@ -16,7 +16,9 @@ spec.loader.exec_module(check_links)
 GH = "https://github.com/Lucy-Robotics"
 
 
-def test_pages_have_no_broken_links():
+def test_pages_have_no_broken_links(monkeypatch):
+    # Offline only: a developer's $HURI_SPLIT_DIR must not add deep-link checks.
+    monkeypatch.delenv("HURI_SPLIT_DIR", raising=False)
     names = ["README.md", "CONTRIBUTING.md", "RELEASING.md", "docs"]
     assert check_links.PAGES == names
     files = [f for name in names for f in check_links.markdown_files(ROOT / name)]

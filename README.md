@@ -47,7 +47,7 @@ and an event package (and on its own module package, when it brings one).
 | Use case | What it is |
 |---|---|
 | [huri-cli](https://github.com/Lucy-Robotics/huri-cli) | the reference client: microphone and prompt in, text, voice and a gesture view out |
-| [HuRI_ATP_testsite](https://github.com/Lucy-Robotics/HuRI_ATP_testsite) | the acceptance test site: a browser console that launches HuRI and drives a session, to exercise the features of the [test plan](docs/btp.md) |
+| [HuRI_ATP_testsite](https://github.com/Lucy-Robotics/HuRI_ATP_testsite) | the acceptance test site: a browser console that launches HuRI and drives a session, to exercise the features (F1-F19) of the [beta test plan](docs/btp.md); the site calls it the ATP and uses the same feature IDs |
 | HuRI_website_demo (private) | a demo website: a 3D talking character |
 | [HuRI-inmoov](https://github.com/Lucy-Robotics/HuRI-inmoov) | an InMoov robot that listens, answers and gestures while it speaks |
 
