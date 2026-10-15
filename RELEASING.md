@@ -53,6 +53,7 @@ cut releases:
 3. Tag `main`'s merge commit `X.Y.Z` (no `v` prefix, like `0.2.0` and `0.3.0`)
    and push the tag. Publish a GitHub release for it: its notes are the
    changelog, and they say what breaks for modules on a minor release.
+   Then publish the same commit to PyPI (see [Publishing](#publishing)).
 4. On `dev`, bump `__version__` to the next `X.(Y+1).0.dev0`.
 
 This repository was renamed from `Lucy-Robotics/HuRI` to
@@ -67,14 +68,19 @@ release as `huri-core` is `0.4.0`.
 
 ## Publishing
 
-Releases are git-only, there is no PyPI package to maintain:
+A release is a git tag **and** a PyPI upload of the tagged commit, so both
+always hold the same code. PyPI never accepts the same version twice: upload
+only once the tag is on `main` and CI is green.
 
 ```bash
-pip install "huri-core[server] @ git+https://github.com/Lucy-Robotics/huri-core.git@0.4.0"
-python -c "import huri_core; print(huri_core.__version__)"
+git switch --detach X.Y.Z && rm -rf dist
+python -m build && twine check dist/* && twine upload dist/*
+pip install "huri-core[server]==X.Y.Z"   # check it installs from PyPI
 ```
 
-`[client]` and `[dev]` install the same way.
+Pre-releases (`X.Y.Z.devN`) may be uploaded to try packaging; pip installs
+them only with `--pre` or an exact pin. From git, any ref still works:
+`pip install "huri-core[server] @ git+https://github.com/Lucy-Robotics/huri-core.git@X.Y.Z"`.
 
 ## huri-core and huri-modules
 
