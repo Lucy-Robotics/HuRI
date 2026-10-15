@@ -1,3 +1,0 @@
-# Hardware pins of huri-module-emo on AMD. torch comes from the ROCm wheels the installer adds first.
-# Installed by scripts/install_local.sh through scripts/module_requirements.py.
-transformers==4.46.3  # compatible with the ROCm torch 2.8 wheel

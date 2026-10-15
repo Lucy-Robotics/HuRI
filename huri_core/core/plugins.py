@@ -6,7 +6,7 @@ A package registers what it provides in its pyproject.toml:
     stt = "huri_stt.module:STT"
 
     [project.entry-points."huri.events"]
-    "huri.transcript" = "huri_events.text:Transcript"
+    "huri.transcript" = "huri_events.speech:Transcript"
 
 so installing it with pip is all it takes for HuRI to find it. A module can also
 be referenced by import path (`my_pkg.servo:Servo`) without any packaging, as
@@ -174,8 +174,9 @@ def load_modules(selection: Optional[Iterable[str]] = None) -> Dict[str, Type[Mo
             f"Installed modules: {sorted(available)}"
             if available
             else f"No module is installed under the {MODULES_GROUP!r} entry point "
-            "group: install huri-core (`pip install -e .` from a checkout) or a "
-            "module package."
+            "group: huri-core ships none. pip install a module package (the "
+            "curated ones: https://github.com/Lucy-Robotics/huri-modules, or "
+            "`huri hub install <name>`)."
         )
         raise ValueError(
             f"HURI_MODULES lists unknown module(s): {sorted(unknown)}. {hint}"

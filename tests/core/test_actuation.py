@@ -8,16 +8,21 @@ from pathlib import Path
 import pytest
 
 from huri_core.core.compat import CompatibilityError, actuating_modules, check_actuation
+from huri_core.core.events import JsonEvent
 from huri_core.core.manifest import parse_manifest
 from huri_core.core.module import Module
 
 ROOT = Path(__file__).resolve().parents[2]
 
 
+class Motion(JsonEvent):
+    """The toy event Servo and Arm consume (registered as `acme.motion`)."""
+
+
 class Servo(Module):
     """Declares actuation on the class (e.g. an unpackaged, tier-0 module)."""
 
-    input_type, output_type = "huri.motion", None
+    input_type, output_type = "acme.motion", None
     actuation = True
 
     async def process(self, data):
@@ -27,18 +32,18 @@ class Servo(Module):
 class Arm(Module):
     """Declares actuation in its manifest only."""
 
-    input_type, output_type = "huri.motion", None
+    input_type, output_type = "acme.motion", None
 
 
 class Logger(Module):
-    input_type, output_type = "huri.token", None
+    input_type, output_type = "acme.motion", None
 
 
 ARM_MANIFEST = parse_manifest(
     {
         "name": "arm",
         "summary": "Moves an arm",
-        "input": {"topic": "huri.motion", "event": "huri_events.motion:Motion"},
+        "input": {"topic": "acme.motion", "event": "acme_events.motion:Motion"},
         "requires": {"actuation": True},
         "huri_core": ">=0.4.0.dev0,<0.5",
     }
@@ -68,25 +73,49 @@ def test_opted_in_modules_run_and_others_are_unaffected():
     assert check_actuation({"logger": Logger}, {}, []) == []
 
 
-def build_app(**env):
+def toy_event_package(root: Path) -> Path:
+    """An installed event distribution registering `acme.motion`, as pip would
+    lay it out: a .dist-info whose entry_points.txt importlib.metadata reads.
+    The server needs every enabled module's topics registered (check_modules)."""
+    dist_info = root / "acme_events-0.1.0.dist-info"
+    dist_info.mkdir()
+    (dist_info / "METADATA").write_text(
+        "Metadata-Version: 2.1\nName: acme-events\nVersion: 0.1.0\n"
+    )
+    (dist_info / "entry_points.txt").write_text(
+        f"[huri.events]\nacme.motion = {__name__}:Motion\n"
+    )
+    return root
+
+
+def build_app(site: Path, **env):
     """Import the server app the way Serve does, with these settings."""
     return subprocess.run(
         [sys.executable, "-c", "import huri_core.app"],
         cwd=ROOT,
-        env={**os.environ, "PYTHONWARNINGS": "ignore", **env},
+        env={
+            **os.environ,
+            "PYTHONWARNINGS": "ignore",
+            "PYTHONPATH": os.pathsep.join([str(site), str(ROOT)]),
+            **env,
+        },
         capture_output=True,
         text=True,
         timeout=300,
     )
 
 
-def test_server_refuses_an_enabled_but_not_opted_in_actuation_module():
-    servo = f"{__name__}:Servo"
-    refused = build_app(HURI_MODULES=f"tag,{servo}")
+def test_server_refuses_an_enabled_but_not_opted_in_actuation_module(tmp_path):
+    pytest.importorskip("ray.serve", reason="builds the app: huri-core[server]")
+    site = toy_event_package(tmp_path)
+    servo, logger = f"{__name__}:Servo", f"{__name__}:Logger"
+    refused = build_app(site, HURI_MODULES=f"{logger},{servo}")
     assert refused.returncode != 0
     assert "HURI_ACTUATION_MODULES" in refused.stderr
 
-    allowed = build_app(HURI_MODULES=f"tag,{servo}", HURI_ACTUATION_MODULES=servo)
+    allowed = build_app(
+        site, HURI_MODULES=f"{logger},{servo}", HURI_ACTUATION_MODULES=servo
+    )
     assert allowed.returncode == 0, allowed.stderr
 
 
@@ -101,7 +130,7 @@ def test_import_path_cannot_skip_a_packaged_modules_actuation_declaration(
 
     (tmp_path / "huri_module.toml").write_text(
         'name = "arm"\nsummary = "Moves an arm"\n'
-        'input = { topic = "huri.motion", event = "huri_events.motion:Motion" }\n'
+        'input = { topic = "acme.motion", event = "acme_events.motion:Motion" }\n'
         'requires = { actuation = true }\nhuri_core = ">=0.4.0.dev0,<0.5"\n'
     )
     dist = SimpleNamespace(

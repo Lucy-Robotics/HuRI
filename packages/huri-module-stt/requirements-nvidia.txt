@@ -1,3 +1,0 @@
-# Hardware-specific pins for huri-module-stt on NVIDIA; install with
-#   pip install -c constraints.txt -r requirements-nvidia.txt -e .
-# The PyPI faster-whisper/CTranslate2 wheels already support CUDA 12.

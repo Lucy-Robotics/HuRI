@@ -3,14 +3,15 @@
 import re
 import subprocess
 import sys
-import tomllib
 from pathlib import Path
 
 from packaging.requirements import Requirement
 from packaging.utils import canonicalize_name
 
+from huri_core.core.manifest import loads_toml  # tomli on Python 3.10
+
 ROOT = Path(__file__).resolve().parents[2]
-PROJECT = tomllib.loads((ROOT / "pyproject.toml").read_text())["project"]
+PROJECT = loads_toml((ROOT / "pyproject.toml").read_text())["project"]
 EXTRAS = PROJECT["optional-dependencies"]
 SERVER_ONLY = {"ray", "fastapi"}
 
@@ -70,14 +71,30 @@ def test_client_side_imports_without_ray_or_fastapi():
     assert res.returncode == 0, res.stderr
 
 
-def test_extras_agree_with_requirement_pins():
-    """requirements*.txt pin exact versions; extras must accept those pins."""
-    pins = {}
-    for path in ("requirements.txt", "serve_requirements.txt", "constraints.txt"):
-        for line in (ROOT / path).read_text().splitlines():
-            match = re.match(r"^([A-Za-z0-9_.\-\[\]]+)==([^\s#]+)", line)
-            if match:
-                pins[canonicalize_name(Requirement(match[1]).name)] = match[2]
+def constraints() -> dict[str, Requirement]:
+    reqs = {}
+    for line in (ROOT / "constraints.txt").read_text().splitlines():
+        line = line.split("#", 1)[0].strip()
+        if line:
+            req = Requirement(line)
+            reqs[canonicalize_name(req.name)] = req
+    return reqs
+
+
+def test_constraints_only_pin_what_huri_core_requires():
+    """constraints.txt is core's: a module's pins belong in huri-modules."""
+    required = {canonicalize_name(r.name) for extra in EXTRAS for r in resolve(extra)}
+    assert constraints().keys() <= required, constraints().keys() - required
+
+
+def test_extras_agree_with_constraint_pins():
+    """constraints.txt pins exact versions; extras must accept those pins."""
+    pins = {
+        name: str(next(iter(req.specifier))).removeprefix("==")
+        for name, req in constraints().items()
+        if re.fullmatch(r"==[^,*]+", str(req.specifier))
+    }
+    assert pins, "constraints.txt pins nothing exactly"
     for extra in EXTRAS:
         for req in resolve(extra):
             version = pins.get(canonicalize_name(req.name))

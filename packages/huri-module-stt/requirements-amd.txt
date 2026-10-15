@@ -1,5 +1,0 @@
-# Hardware-specific pins for huri-module-stt on AMD; install with
-#   pip install -c constraints.txt -r requirements-amd.txt -e .
-# faster-whisper runs on CTranslate2; the PyPI wheel is CUDA/CPU only. On ROCm
-# install the ROCm CTranslate2 wheel first (scripts/install_local.sh and
-# deploy/Dockerfile.amd build it), then this package with --no-deps.

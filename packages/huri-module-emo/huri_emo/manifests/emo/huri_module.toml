@@ -1,7 +1,0 @@
-name = "emo"
-summary = "Estimates the emotion of speech from its prosody"
-input = { topic = "huri.voice", event = "huri_events.speech:Voice" }
-output = { topic = "huri.emotion", event = "huri_events.emotion:Emotion" }
-events = ["huri-events>=0.1,<0.2"]
-requires = { gpu = false, actuation = false }
-huri_core = ">=0.4.0.dev0,<0.5"

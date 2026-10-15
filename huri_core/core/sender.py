@@ -12,20 +12,12 @@ logger = logging.getLogger("ray.serve")
 class Sender(Module):
     """Sender Module
 
-    Send output data to the client.
-    This data must be JSON serialisable, like a dataclass.
-    Audio wire format:  [4B sample_rate uint32][1B end][8B pts float64][float32 PCM].
-    Motion wire format: [8B pts float64][4B fps uint32][4B n_frames uint32]
-                        [poses float32 n*165][expressions float32 n*100]
-                        [trans float32 n*3].
-
-    This data must be JSON serialisable, like a dataclass.
-
-    Audio wire format:
-        [4B sample_rate uint32][1B end][8B pts float64][float32 PCM].
-    Motion wire format:
-        [8B pts float64][4B fps uint32][4B n_frames uint32]
-        [poses float32 n*165][expressions float32 n*100][trans float32 n*3].
+    Sends the events of one topic (`input_type`) to the client, on the wire
+    the event's to_wire() chooses:
+        - a mapping (JsonEvent): a JSON text frame {"topic": ..., "data": ...};
+        - bytes (BytesEvent): a binary frame [u16 topic length][topic][payload].
+    The payload's own layout (audio, motion...) is the event package's
+    business: see its to_wire().
 
     input: auto,
     output: None"""

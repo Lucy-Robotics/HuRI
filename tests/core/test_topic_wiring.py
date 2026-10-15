@@ -4,20 +4,32 @@ Renaming a topic in a module (`audio` -> `audio.out`) without updating the
 client configs produced a pipeline that logged success at every stage and
 delivered nothing: the EventGraph drops a publish with no subscriber, and an
 outbound Sender bound to a topic nobody publishes simply never fires.
+
+The events here are toys: the curated topics and their wire formats are
+tested in huri-modules, next to huri-events.
 """
 
 import asyncio
 import struct
+from dataclasses import dataclass
 
-import numpy as np
 import pytest
-from huri_events.motion import Motion
 
 from huri_core.core.compat import CompatibilityError, check_session
+from huri_core.core.events import BytesEvent, JsonEvent
 from huri_core.core.module import Module
-from huri_core.core.plugins import installed_modules, load_modules
 from huri_core.core.sender import Sender
 from huri_core.core.session import Session
+
+
+@dataclass
+class Pose(JsonEvent):
+    joints: list
+    pts: float
+
+
+class Frame(BytesEvent):
+    """A binary event, framed `[u16 topic length][topic][payload]` on the wire."""
 
 
 class _Stub(Module):
@@ -44,75 +56,52 @@ class _FakeWS:
         self.sent.append((message["topic"], message["data"]))
 
 
-def _motion(frames=3):
-    return Motion(
-        poses=np.arange(frames * 165, dtype=np.float32).reshape(frames, 165),
-        expressions=np.arange(frames * 100, dtype=np.float32).reshape(frames, 100),
-        trans=np.arange(frames * 3, dtype=np.float32).reshape(frames, 3),
-        pts=1.5,
-    )
-
-
-def test_pipeline_topics_are_connected():
-    """Every module's input must be some other module's output (or an entrypoint)."""
-    modules = load_modules(installed_modules())
-    produced = {m.output_type for m in modules.values() if m.output_type}
-    entrypoints = {
-        "huri.audio.in",
-        "huri.question",
-    }  # fed by the client, not by a module
-    dangling = {
-        name: m.input_type
-        for name, m in modules.items()
-        if m.input_type not in produced and m.input_type not in entrypoints
-    }
-    assert not dangling, f"modules subscribed to topics nobody emits: {dangling}"
-
-
-def test_unknown_hook_topic_is_rejected():
-    pipeline = [_Stub("huri.token", "huri.audio.out")]
-    with pytest.raises(CompatibilityError, match="huri.audio.out"):
-        # the pre-rename name: must not silently produce a dead Sender
-        check_session(pipeline, sent=["huri.token"], subscribed=["audio"])
-
-
-def test_known_hook_topic_is_accepted():
-    check_session(
-        [_Stub("huri.token", "huri.audio.out")],
-        sent=["huri.token"],
-        subscribed=["huri.audio.out"],
-    )
-
-
-def test_event_reaches_the_sender_for_its_topic():
-    ws = _FakeWS()
-    motion = _motion()
-    session = Session(
-        [
-            _Stub("huri.token", "huri.audio.out", emit=None),
-            _Stub("huri.audio.out", "huri.motion", emit=motion),
-            Sender(ws, "huri.motion"),
-        ]
-    )
-
+def _deliver(session, topic, ws):
     async def run():
-        await session.publish("huri.audio.out", object())
+        await session.publish(topic, object())
         for _ in range(50):
             await asyncio.sleep(0.005)
             if ws.sent:
                 return
 
     asyncio.run(run())
-    assert [topic for topic, _ in ws.sent] == ["huri.motion"]
 
 
-def test_motion_survives_the_wire():
-    """from_wire used to drop the body, yielding a zero-frame Motion."""
-    original = _motion(4)
-    decoded = Motion.from_wire(original.to_wire())
+def test_unknown_hook_topic_is_rejected():
+    pipeline = [_Stub("toy.token", "toy.audio.out")]
+    with pytest.raises(CompatibilityError, match="toy.audio.out"):
+        # the pre-rename name: must not silently produce a dead Sender
+        check_session(pipeline, sent=["toy.token"], subscribed=["audio"])
 
-    assert decoded.pts == pytest.approx(original.pts)
-    assert decoded.fps == original.fps
-    np.testing.assert_array_equal(decoded.poses, original.poses)
-    np.testing.assert_array_equal(decoded.expressions, original.expressions)
-    np.testing.assert_array_equal(decoded.trans, original.trans)
+
+def test_known_hook_topic_is_accepted():
+    check_session(
+        [_Stub("toy.token", "toy.audio.out")],
+        sent=["toy.token"],
+        subscribed=["toy.audio.out"],
+    )
+
+
+def test_json_event_reaches_the_sender_for_its_topic():
+    ws = _FakeWS()
+    session = Session(
+        [
+            _Stub("toy.token", "toy.audio.out", emit=None),
+            _Stub("toy.audio.out", "toy.pose", emit=Pose([0.1, 0.2], pts=1.5)),
+            Sender(ws, "toy.pose"),
+        ]
+    )
+    _deliver(session, "toy.audio.out", ws)
+    assert ws.sent == [("toy.pose", {"joints": [0.1, 0.2], "pts": 1.5})]
+
+
+def test_bytes_event_is_sent_as_a_framed_binary_message():
+    ws = _FakeWS()
+    session = Session(
+        [
+            _Stub("toy.audio.out", "toy.frame", emit=Frame(b"\x00\x01\x02")),
+            Sender(ws, "toy.frame"),
+        ]
+    )
+    _deliver(session, "toy.audio.out", ws)
+    assert ws.sent == [("toy.frame", b"\x00\x01\x02")]
