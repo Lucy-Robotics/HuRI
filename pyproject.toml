@@ -53,7 +53,7 @@ dev = [
 huri = "huri_core.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/Lucy-Robotics/HuRI-landing"
+Homepage = "https://github.com/Lucy-Robotics/huri-core"
 Repository = "https://github.com/Lucy-Robotics/huri-core"
 Documentation = "https://github.com/Lucy-Robotics/huri-core#readme"
 Changelog = "https://github.com/Lucy-Robotics/huri-core/releases"

@@ -217,7 +217,9 @@ terraform.rc
 
 # Others
 .trash
-docs
+# Doxygen's output (Doxyfile: OUTPUT_DIRECTORY = docs); the rest of docs/ is tracked.
+/docs/html/
+/docs/latex/
 
 # Local environments
 /.venv*/
