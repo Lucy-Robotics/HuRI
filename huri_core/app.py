@@ -22,8 +22,8 @@ def build_app() -> Application:
     # a host that cannot run e.g. CosyVoice never creates the TTS replica. It may
     # also list import paths (my_pkg.servo:Servo) of unpackaged modules.
     # Default-deny: unset or empty registers no module at all, because any
-    # installed package can provide one. scripts/install_local.sh and the
-    # shipped serve configs set it.
+    # installed package can provide one. huri-modules' installer and serve
+    # configs set it.
     modules = load_modules(parse_selection(os.environ.get("HURI_MODULES")))
     if modules:
         logger.info("[HuRI] enabled modules (HURI_MODULES): %s", sorted(modules))

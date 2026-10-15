@@ -1,11 +1,10 @@
 import asyncio
 from dataclasses import dataclass
 
-import numpy as np
 import pytest
 
 from huri_core.core.bus import EventGraph
-from huri_core.core.events import EventData
+from huri_core.core.events import BytesEvent, EventData, JsonEvent
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -26,8 +25,33 @@ class DummyEvent(EventData):
 
 
 @dataclass
-class ArrayEvent(EventData):
-    data: np.ndarray
+class Reading(JsonEvent):
+    """A toy event: what a third-party sensor package could register."""
+
+    sensor: str
+    value: float
+
+
+# ---------------------------------------------------------------------------
+# wire formats
+# ---------------------------------------------------------------------------
+
+
+def test_json_event_round_trips_through_its_wire_dict():
+    wire = Reading("thermo", 21.5).to_wire()
+    assert wire == {"sensor": "thermo", "value": 21.5}
+    assert Reading.from_wire(wire) == Reading("thermo", 21.5)
+
+
+def test_bytes_event_is_its_payload_and_summarizes_its_length():
+    event = BytesEvent.from_wire(b"\x00\x01\x02")
+    assert event.to_wire() == b"\x00\x01\x02"
+    assert event.summarize() == "BytesEvent(len:3)"
+
+
+def test_base_event_has_no_wire_format():
+    with pytest.raises(NotImplementedError):
+        EventData().to_wire()
 
 
 # ---------------------------------------------------------------------------

@@ -11,8 +11,8 @@ A module package ships one manifest per module it registers, next to its code:
     huri_core = ">=0.3,<0.4"
 
 `output` is omitted by a terminal module; `events` and `requires` are optional.
-Tooling (the startup compatibility check, the hub) reads it to reason about a
-module before, or without, loading it.
+Tooling (the startup compatibility check, huri-modules' hub) reads it to
+reason about a module before, or without, loading it.
 """
 
 import re

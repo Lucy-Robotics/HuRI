@@ -3,16 +3,19 @@
 import re
 import subprocess
 import sys
-import tomllib
 from pathlib import Path
 
 from packaging.requirements import Requirement
 from packaging.utils import canonicalize_name
 
+from huri_core.core.manifest import loads_toml  # tomli on Python 3.10
+
 ROOT = Path(__file__).resolve().parents[2]
-PROJECT = tomllib.loads((ROOT / "pyproject.toml").read_text())["project"]
+PROJECT = loads_toml((ROOT / "pyproject.toml").read_text())["project"]
 EXTRAS = PROJECT["optional-dependencies"]
 SERVER_ONLY = {"ray", "fastapi"}
+# Manifest ranges are checked by the server only (startup and sessions).
+NOT_FOR_CLIENTS = SERVER_ONLY | {"packaging", "tomli"}
 
 # What a client-side program imports: the base classes and the client SDK.
 CLIENT_IMPORTS = [
@@ -22,6 +25,7 @@ CLIENT_IMPORTS = [
     "huri_core.core.session",
     "huri_core.core.client",
     "huri_core.core.dataclasses.config",
+    "huri_core.cli",
 ]
 
 
@@ -47,7 +51,7 @@ def test_base_install_has_no_dependency():
 
 
 def test_client_extras_exclude_server_stack():
-    assert not names(resolve("client")) & SERVER_ONLY
+    assert not names(resolve("client")) & NOT_FOR_CLIENTS
 
 
 def test_server_extra_owns_the_serve_pins():
@@ -56,13 +60,14 @@ def test_server_extra_owns_the_serve_pins():
     assert "4.25.8" in pinned["protobuf"].specifier
 
 
-def test_client_side_imports_without_ray_or_fastapi():
+def test_client_side_imports_without_the_server_stack():
     # A None entry in sys.modules makes `import ray` raise ImportError, as if
     # only huri-core[client] were installed.
     code = (
         "import sys\n"
-        + "".join(f"sys.modules[{m!r}] = None\n" for m in sorted(SERVER_ONLY))
+        + "".join(f"sys.modules[{m!r}] = None\n" for m in sorted(NOT_FOR_CLIENTS))
         + "".join(f"import {m}\n" for m in CLIENT_IMPORTS)
+        + "assert huri_core.cli.main(['--help']) == 0\n"
     )
     res = subprocess.run(
         [sys.executable, "-c", code], cwd=ROOT, capture_output=True, text=True
@@ -70,16 +75,41 @@ def test_client_side_imports_without_ray_or_fastapi():
     assert res.returncode == 0, res.stderr
 
 
-def test_extras_agree_with_requirement_pins():
-    """requirements*.txt pin exact versions; extras must accept those pins."""
-    pins = {}
-    for path in ("requirements.txt", "serve_requirements.txt", "constraints.txt"):
-        for line in (ROOT / path).read_text().splitlines():
-            match = re.match(r"^([A-Za-z0-9_.\-\[\]]+)==([^\s#]+)", line)
-            if match:
-                pins[canonicalize_name(Requirement(match[1]).name)] = match[2]
+def constraints() -> dict[str, Requirement]:
+    reqs = {}
+    for line in (ROOT / "constraints.txt").read_text().splitlines():
+        line = line.split("#", 1)[0].strip()
+        if line:
+            req = Requirement(line)
+            reqs[canonicalize_name(req.name)] = req
+    return reqs
+
+
+def test_constraints_only_pin_what_huri_core_requires():
+    """constraints.txt is core's: a module's pins belong in huri-modules."""
+    required = {canonicalize_name(r.name) for extra in EXTRAS for r in resolve(extra)}
+    assert constraints().keys() <= required, constraints().keys() - required
+
+
+def test_extras_agree_with_constraint_pins():
+    """constraints.txt pins exact versions; extras must accept those pins."""
+    pins = {
+        name: str(next(iter(req.specifier))).removeprefix("==")
+        for name, req in constraints().items()
+        if re.fullmatch(r"==[^,*]+", str(req.specifier))
+    }
+    assert pins, "constraints.txt pins nothing exactly"
     for extra in EXTRAS:
         for req in resolve(extra):
             version = pins.get(canonicalize_name(req.name))
             if version and req.specifier:
                 assert version in req.specifier, f"[{extra}] {req} vs =={version}"
+
+
+def test_the_package_is_typed():
+    # PEP 561: without py.typed in the wheel, type checkers of an installed
+    # huri-core (huri-modules' CI) see it as untyped. CI's build job checks
+    # the wheel itself.
+    tool = loads_toml((ROOT / "pyproject.toml").read_text())["tool"]
+    assert (ROOT / "huri_core" / "py.typed").is_file()
+    assert "py.typed" in tool["setuptools"]["package-data"]["huri_core"]

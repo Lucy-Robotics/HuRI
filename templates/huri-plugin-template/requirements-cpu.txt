@@ -1,1 +1,0 @@
-# Exact pins for CPU-only machines (empty: this example has no heavy dependency).

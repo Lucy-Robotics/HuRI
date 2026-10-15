@@ -6,7 +6,7 @@ A package registers what it provides in its pyproject.toml:
     stt = "huri_stt.module:STT"
 
     [project.entry-points."huri.events"]
-    "huri.transcript" = "huri_events.text:Transcript"
+    "huri.transcript" = "huri_events.speech:Transcript"
 
 so installing it with pip is all it takes for HuRI to find it. A module can also
 be referenced by import path (`my_pkg.servo:Servo`) without any packaging, as
@@ -100,13 +100,17 @@ def _entry_points(group: str) -> Dict[str, EntryPoint]:
     for ep in entry_points(group=group):
         other = found.get(ep.name)
         if other is not None and other.value != ep.value:
-            raise PluginError(
-                f"{group} entry point {ep.name!r} is registered twice: "
-                f"{other.value} (from {_dist(other)}) and {ep.value} "
-                f"(from {_dist(ep)}). Uninstall one of them."
-            )
+            raise PluginError(_registered_twice(group, other, ep))
         found[ep.name] = ep
     return found
+
+
+def _registered_twice(group: str, first: EntryPoint, second: EntryPoint) -> str:
+    return (
+        f"{group} entry point {first.name!r} is registered twice: "
+        f"{first.value} (from {_dist(first)}) and {second.value} "
+        f"(from {_dist(second)}). Uninstall one of them."
+    )
 
 
 def is_import_path(name: str) -> bool:
@@ -174,8 +178,8 @@ def load_modules(selection: Optional[Iterable[str]] = None) -> Dict[str, Type[Mo
             f"Installed modules: {sorted(available)}"
             if available
             else f"No module is installed under the {MODULES_GROUP!r} entry point "
-            "group: install huri-core (`pip install -e .` from a checkout) or a "
-            "module package."
+            "group: huri-core ships none. pip install a module package (see "
+            '"Plugins: entry points" in the huri-core README).'
         )
         raise ValueError(
             f"HURI_MODULES lists unknown module(s): {sorted(unknown)}. {hint}"

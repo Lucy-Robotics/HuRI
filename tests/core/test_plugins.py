@@ -165,19 +165,6 @@ def test_client_cannot_use_an_import_path_the_server_did_not_list():
         factory.create_from_config("user", {"servo": config})
 
 
-# --- the real, installed registry --------------------------------------------
-
-
-def test_curated_modules_and_events_are_registered_by_huri_core():
-    """Needs huri-core installed (`pip install -e .`), like the server does."""
-    modules = plugins.load_modules(["vad", "tag", "qag", "eag"])
-    assert set(modules) == {"vad", "tag", "qag", "eag"}
-    events = plugins.load_events()
-    for module in modules.values():
-        assert module.input_type in events
-        assert module.output_type is None or module.output_type in events
-
-
 # --- default-deny (HURI_MODULES unset) ----------------------------------------
 
 
@@ -189,9 +176,10 @@ def test_unset_allow_list_enables_and_imports_nothing(installed, selection):
     assert plugins.load_modules(selection) == {}
 
 
-def test_server_without_allow_list_rejects_every_session(monkeypatch):
+def test_server_without_allow_list_rejects_every_session(installed, monkeypatch):
     """With HURI_MODULES unset, a session asking for an installed module is
     refused, and told why. Builds the registry the way HuRI.__init__ does."""
+    installed[plugins.MODULES_GROUP].append(FakeEntryPoint("toy", ToyModule))
     monkeypatch.delenv("HURI_MODULES", raising=False)
     enabled = plugins.load_modules(plugins.parse_selection(os.getenv("HURI_MODULES")))
     factory = ModuleFactory(handles={}, installed=plugins.installed_modules())
@@ -199,13 +187,13 @@ def test_server_without_allow_list_rejects_every_session(monkeypatch):
         factory.register(name, cls)
 
     assert factory.registered() == []
-    config = ModuleConfig.from_dict({"name": "tag"})
+    config = ModuleConfig.from_dict({"name": "toy"})
     with pytest.raises(ValueError, match="installed but not enabled.*HURI_MODULES"):
-        factory.create_from_config("user", {"tag": config})
+        factory.create_from_config("user", {"toy": config})
 
 
 def test_unknown_module_is_not_reported_as_disabled():
-    factory = ModuleFactory(handles={}, installed=["tag"])
+    factory = ModuleFactory(handles={}, installed=["toy"])
     with pytest.raises(ValueError, match="Unknown module 'nope'"):
         factory.create("user", "nope")
 

@@ -5,14 +5,14 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "huri-core"
 dynamic = ["version"]
-description = "HuRI: realtime, modular conversational pipeline for robots"
+description = "HuRI core: the framework of a realtime, modular conversational pipeline for robots"
 readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.10"
 # The base install is the abstract framework only (Module, EventData, bus):
 # no third-party dependency. Heavy parts sit behind extras so a client never
-# installs Ray or FastAPI. requirements*.txt keep the exact pins the images and
-# install_local.sh use; tests/core/test_packaging.py keeps both in step.
+# installs Ray or FastAPI. constraints.txt repeats the server's pins for what
+# gets installed next to it; tests/core/test_packaging.py keeps both in step.
 dependencies = []
 
 [project.optional-dependencies]
@@ -32,9 +32,6 @@ server = [
 client = [
   "websockets>=16,<17",
   "omegaconf>=2.3,<2.4",
-  # `huri hub` compares manifests' huri-core ranges.
-  "packaging>=23",
-  "tomli>=2; python_version < '3.11'",
 ]
 dev = [
   "black==26.3.1",
@@ -44,17 +41,28 @@ dev = [
   "mypy==1.20.2",
   "pytest==9.0.3",
   "pytest-asyncio==1.4.0",
+  # The tests read manifests and requirements, which only the server needs at
+  # runtime: CI's client job installs [client,dev].
+  "packaging>=23",
+  "tomli>=2; python_version < '3.11'",
 ]
 
 [project.scripts]
+# A dispatcher over the "huri.commands" entry points of installed packages
+# (huri_core/cli.py): huri-core itself provides no command.
 huri = "huri_core.cli:main"
 
 [project.urls]
-Repository = "https://github.com/Lucy-Robotics/HuRI"
+Homepage = "https://github.com/Lucy-Robotics/HuRI-landing"
+Repository = "https://github.com/Lucy-Robotics/huri-core"
+Documentation = "https://github.com/Lucy-Robotics/huri-core#readme"
+Changelog = "https://github.com/Lucy-Robotics/huri-core/releases"
+Modules = "https://github.com/Lucy-Robotics/huri-modules"
 
 # huri-core registers no module and no event: the curated ones come from their
-# own packages (packages/huri-events, packages/huri-module-*), through the
-# entry points in their pyproject.toml (see huri_core/core/plugins.py).
+# own packages in https://github.com/Lucy-Robotics/huri-modules (huri-events,
+# huri-module-*), through the entry points in their pyproject.toml (see
+# huri_core/core/plugins.py).
 
 [tool.setuptools.dynamic]
 # Single source of truth: huri_core/__init__.py. See RELEASING.md.
@@ -62,6 +70,11 @@ version = { attr = "huri_core.__version__" }
 
 [tool.setuptools.packages.find]
 include = ["huri_core*"]
+
+[tool.setuptools.package-data]
+# PEP 561: type checkers of projects that install huri-core (huri-modules' CI,
+# module authors) read its annotations.
+huri_core = ["py.typed"]
 
 [tool.black]
 line-length = 88
@@ -92,24 +105,8 @@ warn_return_any = true
 warn_unused_configs = true
 exclude = [
   "^tests/",
-  "^packages/[^/]+/tests/",
-  "^templates/.*/tests/",
 ]
 
 [tool.pytest.ini_options]
-testpaths = ["tests", "packages/*/tests"]
-# Separate distributions living in this repo (packages/*, examples/cli).
-pythonpath = [
-  "packages/huri-events",
-  "packages/huri-module-vad",
-  "packages/huri-module-stt",
-  "packages/huri-module-tag",
-  "packages/huri-module-emo",
-  "packages/huri-module-rag",
-  "packages/huri-module-mov",
-  "packages/huri-tts",
-  "packages/huri-module-tts-piper",
-  "packages/huri-module-tts-cosyvoice",
-  "examples/cli",
-]
+testpaths = ["tests"]
 python_files = ["test_*.py"]
