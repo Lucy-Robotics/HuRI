@@ -14,6 +14,8 @@ ROOT = Path(__file__).resolve().parents[2]
 PROJECT = loads_toml((ROOT / "pyproject.toml").read_text())["project"]
 EXTRAS = PROJECT["optional-dependencies"]
 SERVER_ONLY = {"ray", "fastapi"}
+# Manifest ranges are checked by the server only (startup and sessions).
+NOT_FOR_CLIENTS = SERVER_ONLY | {"packaging", "tomli"}
 
 # What a client-side program imports: the base classes and the client SDK.
 CLIENT_IMPORTS = [
@@ -23,6 +25,7 @@ CLIENT_IMPORTS = [
     "huri_core.core.session",
     "huri_core.core.client",
     "huri_core.core.dataclasses.config",
+    "huri_core.cli",
 ]
 
 
@@ -48,7 +51,7 @@ def test_base_install_has_no_dependency():
 
 
 def test_client_extras_exclude_server_stack():
-    assert not names(resolve("client")) & SERVER_ONLY
+    assert not names(resolve("client")) & NOT_FOR_CLIENTS
 
 
 def test_server_extra_owns_the_serve_pins():
@@ -57,13 +60,14 @@ def test_server_extra_owns_the_serve_pins():
     assert "4.25.8" in pinned["protobuf"].specifier
 
 
-def test_client_side_imports_without_ray_or_fastapi():
+def test_client_side_imports_without_the_server_stack():
     # A None entry in sys.modules makes `import ray` raise ImportError, as if
     # only huri-core[client] were installed.
     code = (
         "import sys\n"
-        + "".join(f"sys.modules[{m!r}] = None\n" for m in sorted(SERVER_ONLY))
+        + "".join(f"sys.modules[{m!r}] = None\n" for m in sorted(NOT_FOR_CLIENTS))
         + "".join(f"import {m}\n" for m in CLIENT_IMPORTS)
+        + "assert huri_core.cli.main(['--help']) == 0\n"
     )
     res = subprocess.run(
         [sys.executable, "-c", code], cwd=ROOT, capture_output=True, text=True

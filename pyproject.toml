@@ -32,9 +32,6 @@ server = [
 client = [
   "websockets>=16,<17",
   "omegaconf>=2.3,<2.4",
-  # `huri hub` compares manifests' huri-core ranges.
-  "packaging>=23",
-  "tomli>=2; python_version < '3.11'",
 ]
 dev = [
   "black==26.3.1",
@@ -44,9 +41,15 @@ dev = [
   "mypy==1.20.2",
   "pytest==9.0.3",
   "pytest-asyncio==1.4.0",
+  # The tests read manifests and requirements, which only the server needs at
+  # runtime: CI's client job installs [client,dev].
+  "packaging>=23",
+  "tomli>=2; python_version < '3.11'",
 ]
 
 [project.scripts]
+# A dispatcher over the "huri.commands" entry points of installed packages
+# (huri_core/cli.py): huri-core itself provides no command.
 huri = "huri_core.cli:main"
 
 [project.urls]
