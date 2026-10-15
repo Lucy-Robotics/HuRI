@@ -60,8 +60,7 @@ class ClientConfig:
             raise ValueError(
                 f"client config uses the removed keys {legacy}: list the topics to "
                 "receive under `subscribe:` and the topics sent under `send:` "
-                "instead (see config/client_template.yaml in "
-                "https://github.com/Lucy-Robotics/huri-modules)"
+                'instead (see "Client SDK" in the huri-core README)'
             )
         modules = {
             module_id: ModuleConfig.from_dict(mod_raw)

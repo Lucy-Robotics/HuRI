@@ -23,7 +23,7 @@ def build_app() -> Application:
     # also list import paths (my_pkg.servo:Servo) of unpackaged modules.
     # Default-deny: unset or empty registers no module at all, because any
     # installed package can provide one. huri-modules' installer and serve
-    # configs set it (https://github.com/Lucy-Robotics/huri-modules).
+    # configs set it.
     modules = load_modules(parse_selection(os.environ.get("HURI_MODULES")))
     if modules:
         logger.info("[HuRI] enabled modules (HURI_MODULES): %s", sorted(modules))

@@ -174,9 +174,8 @@ def load_modules(selection: Optional[Iterable[str]] = None) -> Dict[str, Type[Mo
             f"Installed modules: {sorted(available)}"
             if available
             else f"No module is installed under the {MODULES_GROUP!r} entry point "
-            "group: huri-core ships none. pip install a module package (the "
-            "curated ones: https://github.com/Lucy-Robotics/huri-modules, or "
-            "`huri hub install <name>` with huri-hub, from huri-modules)."
+            "group: huri-core ships none. pip install a module package (see "
+            '"Plugins: entry points" in the huri-core README).'
         )
         raise ValueError(
             f"HURI_MODULES lists unknown module(s): {sorted(unknown)}. {hint}"

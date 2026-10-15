@@ -55,3 +55,17 @@ def test_core_and_its_tests_import_no_module_or_event_package():
             if name.startswith("huri_") and name != "huri_core"
         }
         assert not foreign, f"{path.relative_to(ROOT)} imports {sorted(foreign)}"
+
+
+def test_only_the_cli_hint_names_huri_modules_or_its_hub():
+    """Core points at huri-modules once, in the `huri` command's hint (cli.WHERE);
+    other user-facing hints refer to the huri-core README, so a repo move or a
+    hub change never needs a core release. Docs (README) may link freely."""
+    for path in framework_files():
+        text = path.read_text()
+        rel = path.relative_to(ROOT)
+        assert "Lucy-Robotics/huri-modules" not in text, f"{rel} hardcodes the repo"
+        if path != PACKAGE / "cli.py":
+            assert not any(
+                s in text for s in ("huri hub", "huri-hub", "huri_hub")
+            ), f"{rel} knows of the hub command"
