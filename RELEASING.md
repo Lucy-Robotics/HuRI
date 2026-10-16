@@ -7,7 +7,7 @@ The version lives in one place: `__version__` in `huri_core/__init__.py`.
 distribution and `huri_core.__version__` always agree.
 
 Between releases `dev` carries the next version with a `.devN` suffix
-(`0.4.0.dev0`). Git tags are not used to compute the version: releases are
+(`0.5.0.dev0` after `0.4.0`). Git tags are not used to compute the version: releases are
 tagged on `main`'s merge commit, which `dev` never contains, so a tag-derived
 version would be wrong on `dev`.
 
@@ -16,8 +16,8 @@ version would be wrong on `dev`.
 `huri-core` follows semver. While the major version is `0`, a **minor** bump
 (`0.3` → `0.4`) may break the public surface and a **patch** bump must not.
 Third-party modules and event packages therefore pin `huri-core>=0.X,<0.(X+1)`.
-Before `0.X.0` is tagged, the lower bound is `0.X.0.dev0` (`>=0.4.0.dev0,<0.5`
-today): a `.devN` build is a pre-release below `0.X`, which `>=0.X` excludes.
+Before `0.X.0` is tagged, the lower bound is `0.X.0.dev0` (e.g.
+`>=0.5.0.dev0,<0.6`): a `.devN` build is a pre-release below `0.X`, which `>=0.X` excludes.
 
 Public surface, i.e. what a breaking change is measured against:
 
@@ -95,8 +95,8 @@ tested set built against one huri-core ref, `HURI_CORE_REF` in its
 | ------------ | --------- |
 | 0.1.x        | 0.4.x     |
 
-Once `0.4.0` is tagged here, huri-modules moves `HURI_CORE_REF` from `dev` to
-`0.4.0` and its packages' range from `>=0.4.0.dev0,<0.5` to `>=0.4,<0.5`.
+huri-modules 0.1.x is built against huri-core `0.4.0` (`HURI_CORE_REF=0.4.0`)
+and its packages pin `huri-core>=0.4,<0.5`.
 
 ### How a breaking change propagates
 
