@@ -52,13 +52,13 @@ def test_known_repositories_pass(tmp_path):
         "[core](https://github.com/Lucy-Robotics/huri-core)\n"
         "[stt](https://github.com/Lucy-Robotics/huri-modules/tree/main/packages/x)\n"
         "[tpl](https://github.com/Lucy-Robotics/huri-plugin-template#readme)\n"
-        "[robot](https://github.com/Lucy-Robotics/HuRI-inmoov)\n"
-        "[cli](https://github.com/Lucy-Robotics/huri-cli/issues)\n"
+        "[robot](https://github.com/Lucy-Robotics/HuRI-InMoov)\n"
+        "[cli](https://github.com/Lucy-Robotics/HuRI-CLI/issues)\n"
         "[demo](https://github.com/Lucy-Robotics/HuRI_website_demo)\n"
         "[atp](https://github.com/lucy-robotics/huri_atp_testsite)\n"
         "```sh\n"
         "pip install git+https://github.com/Lucy-Robotics/huri-core.git@dev\n"
-        "pip install git+https://github.com/Lucy-Robotics/huri-cli.git@0.1.0\n"
+        "pip install git+https://github.com/Lucy-Robotics/HuRI-CLI.git@0.1.0\n"
         "```\n"
     )
     assert check_links.check_file(page, external=False) == []
@@ -178,7 +178,7 @@ def _siblings(root):
     (modules / "README.md").write_text("# huri-modules\n## Install\n")
     (root / "huri-core").mkdir()
     (root / "huri-core" / "README.md").write_text("# huri-core\n## Client SDK\n")
-    (root / "huri-cli" / "huri-meta").mkdir(parents=True)
+    (root / "HuRI-CLI" / "huri-meta").mkdir(parents=True)
     return root
 
 
@@ -192,8 +192,8 @@ def test_deep_links_resolve_against_sibling_checkouts(tmp_path):
         f"[ok]({GH}/huri-modules/blob/main/README.md#install)\n"
         f"[ok]({GH}/huri-core/issues/93)\n"
         f"[ok]({GH}/huri-core#readme)\n"
-        f"[ok]({GH}/huri-cli/tree/main/huri-meta)\n"
-        f"[gone]({GH}/huri-cli/tree/main/examples/cli)\n"
+        f"[ok]({GH}/HuRI-CLI/tree/main/huri-meta)\n"
+        f"[gone]({GH}/HuRI-CLI/tree/main/examples/cli)\n"
         f"[typo]({GH}/huri-modules/tree/main/packages/huri-module-sst)\n"
         f"[anchor]({GH}/huri-core#client-sdj)\n"
         "```sh\n"

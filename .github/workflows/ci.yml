@@ -43,7 +43,7 @@ jobs:
   deep-links:
     name: deep links into the other repositories (non-blocking)
     # README and docs/ link into huri-modules (packages/, deploy/, helm/),
-    # huri-cli and huri-plugin-template at `main`: resolve each such path and
+    # HuRI-CLI and huri-plugin-template at `main`: resolve each such path and
     # anchor against a shallow checkout of their `main`, laid out as
     # ./<repo>. Non-blocking: a rename there must not fail this repository's
     # CI, but it shows up here.
@@ -60,9 +60,9 @@ jobs:
           path: huri-modules
       - uses: actions/checkout@v4
         with:
-          repository: Lucy-Robotics/huri-cli
+          repository: Lucy-Robotics/HuRI-CLI
           ref: main
-          path: huri-cli
+          path: HuRI-CLI
       - uses: actions/checkout@v4
         with:
           repository: Lucy-Robotics/huri-plugin-template
