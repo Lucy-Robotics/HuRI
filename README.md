@@ -22,10 +22,10 @@ before the split; GitHub redirects the old URL here.)
 
 | You want to… | Go to | You need |
 |---|---|---|
-| **Try it**: a working pipeline, fast | [huri-modules](https://github.com/Lucy-Robotics/huri-modules), `install.sh` on this machine; it also installs [huri-cli](https://github.com/Lucy-Robotics/huri-cli) to talk to it (`--no-cli` to skip) | that repository only |
+| **Try it**: a working pipeline, fast | [huri-modules](https://github.com/Lucy-Robotics/huri-modules), `install.sh` on this machine; it also installs [HuRI-Cli](https://github.com/Lucy-Robotics/HuRI-Cli) to talk to it (`--no-cli` to skip) | that repository only |
 | **Deploy**: run a chosen set of modules somewhere | [huri-modules](https://github.com/Lucy-Robotics/huri-modules): `install.sh` (bare metal), [deploy/](https://github.com/Lucy-Robotics/huri-modules/tree/main/deploy) (Docker) or [helm/](https://github.com/Lucy-Robotics/huri-modules/tree/main/helm) (Kubernetes) | that repository only |
 | **Build a module**: write or change one module, alone | [huri-plugin-template](https://github.com/Lucy-Robotics/huri-plugin-template) ("Use this template") | `huri-core` + `huri-events`; no GPU, no running pipeline |
-| **Write a client**: a website, a robot, a CLI | the [client SDK](#client-sdk) and [huri-events](https://github.com/Lucy-Robotics/huri-modules/tree/main/packages/huri-events); [huri-cli](https://github.com/Lucy-Robotics/huri-cli) is the reference example to start from | `huri-core[client]` + `huri-events`; your client is its own repository, with its own versions |
+| **Write a client**: a website, a robot, a CLI | the [client SDK](#client-sdk) and [huri-events](https://github.com/Lucy-Robotics/huri-modules/tree/main/packages/huri-events); [HuRI-Cli](https://github.com/Lucy-Robotics/HuRI-Cli) is the reference example to start from | `huri-core[client]` + `huri-events`; your client is its own repository, with its own versions |
 | **Understand or change the framework**: bus, server, plugins, checks | this README, [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [CONTRIBUTING.md](CONTRIBUTING.md) | nothing |
 
 ### The repositories
@@ -35,18 +35,20 @@ before the split; GitHub redirects the old URL here.)
 | [huri-core](https://github.com/Lucy-Robotics/huri-core) | this one: the framework (module and event base classes, bus, server, plugin loader, compatibility checks, client SDK, `huri_core.testing`, the `huri` command), with no concrete module or event |
 | [huri-modules](https://github.com/Lucy-Robotics/huri-modules) | the curated set, released and tested together: [huri-events](https://github.com/Lucy-Robotics/huri-modules/tree/main/packages/huri-events) (one event class per `huri.*` topic), the modules ([vad](https://github.com/Lucy-Robotics/huri-modules/tree/main/packages/huri-module-vad), [stt](https://github.com/Lucy-Robotics/huri-modules/tree/main/packages/huri-module-stt), [tag](https://github.com/Lucy-Robotics/huri-modules/tree/main/packages/huri-module-tag), [emo](https://github.com/Lucy-Robotics/huri-modules/tree/main/packages/huri-module-emo), [rag](https://github.com/Lucy-Robotics/huri-modules/tree/main/packages/huri-module-rag), [tts](https://github.com/Lucy-Robotics/huri-modules/tree/main/packages/huri-module-tts), [mov](https://github.com/Lucy-Robotics/huri-modules/tree/main/packages/huri-module-mov)), the registry of verified modules and [huri-hub](https://github.com/Lucy-Robotics/huri-modules/tree/main/packages/huri-hub) (`huri hub`), install and deploy (`install.sh`, Docker, Helm) |
 | [huri-plugin-template](https://github.com/Lucy-Robotics/huri-plugin-template) | the starter for a new module (a GitHub template repository) |
-| [huri-cli](https://github.com/Lucy-Robotics/huri-cli) | the reference command-line client, a use case of the client SDK; also the source of `huri`, a convenience metapackage (`huri-core[client]` + `huri-cli`) |
+| [HuRI-Cli](https://github.com/Lucy-Robotics/HuRI-Cli) | the reference command-line client, a use case of the client SDK; also the source of `huri`, a convenience metapackage (`huri-core[client]` + `huri-cli`) |
 | [HuRI-inmoov](https://github.com/Lucy-Robotics/HuRI-inmoov) | HuRI driving an InMoov robot: an actuation module, its events and the robot-side client |
 
 ### Built with HuRI
 
 Use cases: clients built on HuRI, each in its own repository, with its own
-versions, not part of HuRI itself. A use case depends on `huri-core[client]`
+versions, not part of HuRI itself. Their repository names start with `HuRI`;
+the repositories of HuRI itself are lowercase `huri-*`, named like their
+packages. A use case depends on `huri-core[client]`
 and an event package (and on its own module package, when it brings one).
 
 | Use case | What it is |
 |---|---|
-| [huri-cli](https://github.com/Lucy-Robotics/huri-cli) | the reference client: microphone and prompt in, text, voice and a gesture view out |
+| [HuRI-Cli](https://github.com/Lucy-Robotics/HuRI-Cli) | the reference client: microphone and prompt in, text, voice and a gesture view out |
 | [HuRI_ATP_testsite](https://github.com/Lucy-Robotics/HuRI_ATP_testsite) | the acceptance test site: a browser console that launches HuRI and drives a session, to exercise the features (F1-F19) of the [beta test plan](docs/btp.md); the site calls it the ATP and uses the same feature IDs |
 | HuRI_website_demo (private) | a demo website: a 3D talking character |
 | [HuRI-inmoov](https://github.com/Lucy-Robotics/HuRI-inmoov) | an InMoov robot that listens, answers and gestures while it speaks |
@@ -327,7 +329,7 @@ and does not stop the others. A refused session raises `HuRISessionError`
 this machine's `user_id`, created once and kept in the user config directory.
 huri-modules ships a commented
 [client_template.yaml](https://github.com/Lucy-Robotics/huri-modules/blob/main/config/client_template.yaml).
-[huri-cli](https://github.com/Lucy-Robotics/huri-cli), a separate repository,
+[HuRI-Cli](https://github.com/Lucy-Robotics/HuRI-Cli), a separate repository,
 is a complete client built on this SDK (microphone, prompt, playback, gesture
 view): the reference use case to start your own from.
 
@@ -496,7 +498,7 @@ release:
 huri-modules' CI also runs against huri-core's `dev`, so a breaking change here
 is seen there before it is released.
 Clients built on the SDK, such as
-[huri-cli](https://github.com/Lucy-Robotics/huri-cli), pin the same minor range
+[HuRI-Cli](https://github.com/Lucy-Robotics/HuRI-Cli), pin the same minor range
 of `huri-core[client]` and release on their own.
 
 ## Developing
