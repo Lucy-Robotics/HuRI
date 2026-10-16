@@ -20,7 +20,7 @@ concurrency:
 
 jobs:
   lint:
-    name: lint (black, isort, flake8, mypy)
+    name: lint (black, isort, flake8, mypy, links)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -31,10 +31,47 @@ jobs:
       - name: install the lint toolchain only
         # mypy has ignore_missing_imports, so it runs without Ray or FastAPI.
         run: pip install -c constraints.txt -e ".[dev]"
-      - run: black --check huri_core tests
-      - run: isort --check-only huri_core tests
-      - run: flake8 huri_core tests
-      - run: mypy huri_core --check-untyped-defs
+      - run: black --check huri_core scripts tests
+      - run: isort --check-only huri_core scripts tests
+      - run: flake8 huri_core scripts tests
+      - run: mypy huri_core scripts --check-untyped-defs
+      - name: links of README, CONTRIBUTING, RELEASING and docs/
+        # Offline: relative links and anchors, and every Lucy-Robotics URL
+        # names a known repository (not the old HuRI name, not HuRI-landing).
+        run: python scripts/check_links.py
+
+  deep-links:
+    name: deep links into the other repositories (non-blocking)
+    # README and docs/ link into huri-modules (packages/, deploy/, helm/),
+    # huri-cli and huri-plugin-template at `main`: resolve each such path and
+    # anchor against a shallow checkout of their `main`, laid out as
+    # ./<repo>. Non-blocking: a rename there must not fail this repository's
+    # CI, but it shows up here.
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: huri-core
+      - uses: actions/checkout@v4
+        with:
+          repository: Lucy-Robotics/huri-modules
+          ref: main
+          path: huri-modules
+      - uses: actions/checkout@v4
+        with:
+          repository: Lucy-Robotics/huri-cli
+          ref: main
+          path: huri-cli
+      - uses: actions/checkout@v4
+        with:
+          repository: Lucy-Robotics/huri-plugin-template
+          ref: main
+          path: huri-plugin-template
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python huri-core/scripts/check_links.py --siblings .
 
   test:
     name: pytest (python ${{ matrix.python }})

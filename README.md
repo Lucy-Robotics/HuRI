@@ -1,23 +1,55 @@
 # huri-core
 
-The framework of [HuRI](https://github.com/Lucy-Robotics/HuRI-landing), a realtime,
-modular conversational pipeline for robots and avatars: a multi-client server
-that runs, per client session, a pipeline of modules exchanging typed events.
+The framework of **HuRI**, a realtime, modular conversational pipeline for
+robots and avatars: speech in, an answer out as text, a voice and gestures. A
+multi-client server runs, per client session, a pipeline of modules (voice
+activity detection, speech-to-text, emotion, retrieval-augmented answers,
+text-to-speech, gesture generation) exchanging typed events.
 
 huri-core is **only the abstract framework**: the base classes modules and
 events derive from, the event bus and the sessions, the Ray Serve server, the
 plugin discovery and its safety checks, the client SDK, a module test harness
 and the `huri` command, which runs the subcommands installed packages provide.
 It ships no module, no concrete event and no command, and it is built and
-tested with none installed.
+tested with none installed. This repository is also HuRI's front door: the
+ecosystem below, [how the pieces fit](docs/ARCHITECTURE.md) and
+[where to contribute](CONTRIBUTING.md). (It was called `Lucy-Robotics/HuRI`
+before the split; GitHub redirects the old URL here.)
 
-| You want to...                                         | Go to                                                                                         |
-| ------------------------------------------------------ | --------------------------------------------------------------------------------------------- |
-| understand HuRI as a whole                             | [Lucy-Robotics/HuRI-landing](https://github.com/Lucy-Robotics/HuRI-landing)                   |
-| run a real pipeline (STT, RAG, TTS, gestures...)       | [Lucy-Robotics/huri-modules](https://github.com/Lucy-Robotics/huri-modules)                   |
-| write a module                                         | [Lucy-Robotics/huri-plugin-template](https://github.com/Lucy-Robotics/huri-plugin-template)   |
-| write a client (a robot, a website, a CLI)             | [Lucy-Robotics/huri-cli](https://github.com/Lucy-Robotics/huri-cli), the reference client     |
-| build on the framework itself, or change it            | this repository                                                                               |
+## HuRI ecosystem
+
+### Start here
+
+| You want to… | Go to | You need |
+|---|---|---|
+| **Try it**: a working pipeline, fast | [huri-modules](https://github.com/Lucy-Robotics/huri-modules), `install.sh` on this machine; it also installs [huri-cli](https://github.com/Lucy-Robotics/huri-cli) to talk to it (`--no-cli` to skip) | that repository only |
+| **Deploy**: run a chosen set of modules somewhere | [huri-modules](https://github.com/Lucy-Robotics/huri-modules): `install.sh` (bare metal), [deploy/](https://github.com/Lucy-Robotics/huri-modules/tree/main/deploy) (Docker) or [helm/](https://github.com/Lucy-Robotics/huri-modules/tree/main/helm) (Kubernetes) | that repository only |
+| **Build a module**: write or change one module, alone | [huri-plugin-template](https://github.com/Lucy-Robotics/huri-plugin-template) ("Use this template") | `huri-core` + `huri-events`; no GPU, no running pipeline |
+| **Write a client**: a website, a robot, a CLI | the [client SDK](#client-sdk) and [huri-events](https://github.com/Lucy-Robotics/huri-modules/tree/main/packages/huri-events); [huri-cli](https://github.com/Lucy-Robotics/huri-cli) is the reference example to start from | `huri-core[client]` + `huri-events`; your client is its own repository, with its own versions |
+| **Understand or change the framework**: bus, server, plugins, checks | this README, [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [CONTRIBUTING.md](CONTRIBUTING.md) | nothing |
+
+### The repositories
+
+| Repository | What it is |
+|---|---|
+| [huri-core](https://github.com/Lucy-Robotics/huri-core) | this one: the framework (module and event base classes, bus, server, plugin loader, compatibility checks, client SDK, `huri_core.testing`, the `huri` command), with no concrete module or event |
+| [huri-modules](https://github.com/Lucy-Robotics/huri-modules) | the curated set, released and tested together: [huri-events](https://github.com/Lucy-Robotics/huri-modules/tree/main/packages/huri-events) (one event class per `huri.*` topic), the modules ([vad](https://github.com/Lucy-Robotics/huri-modules/tree/main/packages/huri-module-vad), [stt](https://github.com/Lucy-Robotics/huri-modules/tree/main/packages/huri-module-stt), [tag](https://github.com/Lucy-Robotics/huri-modules/tree/main/packages/huri-module-tag), [emo](https://github.com/Lucy-Robotics/huri-modules/tree/main/packages/huri-module-emo), [rag](https://github.com/Lucy-Robotics/huri-modules/tree/main/packages/huri-module-rag), [tts](https://github.com/Lucy-Robotics/huri-modules/tree/main/packages/huri-module-tts), [mov](https://github.com/Lucy-Robotics/huri-modules/tree/main/packages/huri-module-mov)), the registry of verified modules and [huri-hub](https://github.com/Lucy-Robotics/huri-modules/tree/main/packages/huri-hub) (`huri hub`), install and deploy (`install.sh`, Docker, Helm) |
+| [huri-plugin-template](https://github.com/Lucy-Robotics/huri-plugin-template) | the starter for a new module (a GitHub template repository) |
+| [huri-cli](https://github.com/Lucy-Robotics/huri-cli) | the reference command-line client, a use case of the client SDK; also the source of `huri`, a convenience metapackage (`huri-core[client]` + `huri-cli`) |
+| [HuRI-inmoov](https://github.com/Lucy-Robotics/HuRI-inmoov) | HuRI driving an InMoov robot: an actuation module, its events and the robot-side client |
+
+### Built with HuRI
+
+Use cases: clients built on HuRI, each in its own repository, with its own
+versions, not part of HuRI itself. A use case depends on `huri-core[client]`
+and an event package (and on its own module package, when it brings one).
+
+| Use case | What it is |
+|---|---|
+| [huri-cli](https://github.com/Lucy-Robotics/huri-cli) | the reference client: microphone and prompt in, text, voice and a gesture view out |
+| [HuRI_ATP_testsite](https://github.com/Lucy-Robotics/HuRI_ATP_testsite) | the acceptance test site: a browser console that launches HuRI and drives a session, to exercise the features (F1-F19) of the [beta test plan](docs/btp.md); the site calls it the ATP and uses the same feature IDs |
+| HuRI_website_demo (private) | a demo website: a 3D talking character |
+| [HuRI-inmoov](https://github.com/Lucy-Robotics/HuRI-inmoov) | an InMoov robot that listens, answers and gestures while it speaks |
 
 ## Install
 
@@ -439,8 +471,8 @@ From here:
   [huri-modules](https://github.com/Lucy-Robotics/huri-modules);
 - **your own module**, with its manifest, events package, tests and CI:
   [huri-plugin-template](https://github.com/Lucy-Robotics/huri-plugin-template);
-- **the big picture** (architecture, contributing):
-  [HuRI-landing](https://github.com/Lucy-Robotics/HuRI-landing).
+- **the big picture**: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), and
+  [CONTRIBUTING.md](CONTRIBUTING.md) for where to open what.
 
 ## Versioning and compatibility
 
@@ -457,9 +489,9 @@ session schema, wire protocol, entry point groups, manifest) is listed in
 versions; each of its releases is a tested set built against one huri-core
 release:
 
-| huri-modules | huri-core |
-| ------------ | --------- |
-| 0.1.x        | 0.4.x     |
+| huri-modules | huri-core | huri-cli (installed by huri-modules' installer) |
+| ------------ | --------- | ----------------------------------------------- |
+| 0.1.x        | 0.4.x     | 0.1.x                                           |
 
 huri-modules' CI also runs against huri-core's `dev`, so a breaking change here
 is seen there before it is released.
@@ -470,14 +502,14 @@ of `huri-core[client]` and release on their own.
 ## Developing
 
 ```sh
-make lint     # black, isort, flake8 (rewrite in place) + mypy
+make lint     # black, isort, flake8 (rewrite in place) + mypy + link check
 make test     # pytest
 make check    # both
 ```
 
-CI (`.github/workflows/ci.yml`) runs the lint, the tests on Python 3.10 to
-3.12, the tests with only `huri-core[client]` installed (no Ray, no FastAPI),
-and a wheel build.
+CI (`.github/workflows/ci.yml`) runs the lint and the link check, the tests
+on Python 3.10 to 3.12, the tests with only `huri-core[client]` installed (no
+Ray, no FastAPI), and a wheel build.
 
 Layout:
 
@@ -492,3 +524,9 @@ Layout:
 - `huri_core/cli.py` — the `huri` command, a dispatcher over the
   `huri.commands` entry points
 - `tests/core/` — everything above, with toy modules and events only
+- `docs/` — [ARCHITECTURE.md](docs/ARCHITECTURE.md) (how the HuRI repositories
+  fit) and the beta test plan ([btp.md](docs/btp.md), [btp.pdf](docs/btp.pdf))
+- `scripts/check_links.py` — the link checker of README.md, CONTRIBUTING.md,
+  RELEASING.md and docs/ (`--siblings DIR` also resolves deep links into
+  checkouts of the other repositories, `--external` fetches web links);
+  tested by `tests/test_check_links.py`

@@ -57,14 +57,15 @@ cut releases:
 4. On `dev`, bump `__version__` to the next `X.(Y+1).0.dev0`.
 
 This repository was renamed from `Lucy-Robotics/HuRI` to
-`Lucy-Robotics/huri-core` at the split. The name `HuRI` is never reused (the
-showcase lives at
-[Lucy-Robotics/HuRI-landing](https://github.com/Lucy-Robotics/HuRI-landing)),
-so GitHub keeps redirecting old clones, remotes and
-`git+https://github.com/Lucy-Robotics/HuRI.git` install strings to huri-core.
-New install strings, docs and git remotes must still use
-`Lucy-Robotics/huri-core`. The earlier tags came with the history; the first
-release as `huri-core` is `0.4.0`.
+`Lucy-Robotics/huri-core` at the split. The name `HuRI` is never reused, so
+GitHub keeps redirecting old clones, remotes, links and install strings naming
+the old repository to huri-core, which is also HuRI's front page (the
+[HuRI ecosystem](README.md#huri-ecosystem) section; the short-lived
+`HuRI-landing` repository that held it after the split is archived). New
+install strings, docs and git remotes must still use `Lucy-Robotics/huri-core`:
+`scripts/check_links.py` reports the old name, and `HuRI-landing`, as errors.
+The earlier tags came with the history; the first release as `huri-core` is
+`0.4.0`.
 
 ## Publishing
 
