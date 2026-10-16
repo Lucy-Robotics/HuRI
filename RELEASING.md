@@ -117,7 +117,7 @@ Once `0.4.0` is tagged here, huri-modules moves `HURI_CORE_REF` from `dev` to
    from pairing it with the wrong core.
 
 Clients built on the SDK are not part of that set.
-[HuRI-Cli](https://github.com/Lucy-Robotics/HuRI-Cli), the reference client,
+[HuRI-CLI](https://github.com/Lucy-Robotics/HuRI-CLI), the reference client,
 has its own versions and tags; its CI runs against huri-core at its
 `HURI_CORE_REF` (default `dev`), and it moves its `huri-core[client]` range
 the same way once huri-core is tagged. huri-modules' installer pins the
