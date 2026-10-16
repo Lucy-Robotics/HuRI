@@ -1,14 +1,21 @@
-# Global pip constraints for all HuRI images. Pass to EVERY `pip install` via
-# `-c /app/constraints.txt` so a later requirements file cannot silently override
-# these versions (which is exactly how protobuf got clobbered before).
+# Pins of the huri-core server process and of its lint toolchain, and nothing
+# else: huri-core[server] and huri-core[dev] already require these, this file
+# exists so that whatever is installed NEXT to huri-core (module packages, their
+# heavy dependencies) cannot silently move them. Pass it to every later
+# `pip install` of a server environment:
+#
+#   pip install -c constraints.txt <module package>
+#
+# huri-modules keeps its own constraints (torch, onnxruntime, ...) on top of
+# these. tests/core/test_packaging.py checks the extras accept every pin here.
 #
 # protobuf: Ray Serve 2.55's ray/serve/_private/config.py:_proto_to_dict() reads
 # FieldDescriptor.label, an attribute protobuf's upb (C) backend removed at >=5.0.
 # With protobuf 5/6/7 every Serve replica crashes in __init__ with
 #   AttributeError: 'FieldDescriptor' object has no attribute 'label'
-# 4.25.8 is the floor onnxruntime requires (>=4.25.8) and stays <5 for
-# google-api-core / googleapis-common-protos / proto-plus / opentelemetry-proto /
-# google-cloud-storage, so it satisfies the whole dependency graph.
+# 4.25.8 stays <5 for google-api-core / googleapis-common-protos / proto-plus /
+# opentelemetry-proto, which Ray pulls in, and is the floor onnxruntime (used
+# by curated modules) requires.
 protobuf==4.25.8
 
 # fastapi: Ray Serve's @serve.ingress does pickle_dumps(app) to check the ASGI
@@ -20,17 +27,15 @@ protobuf==4.25.8
 fastapi<0.139.2
 
 # setuptools: pkg_resources was removed outright in setuptools 82.0.0
-# (2026-02-08). webrtcvad==2.0.10 still does `import pkg_resources` at import
-# time, so anything newer breaks STT startup with
+# (2026-02-08). Packages still doing `import pkg_resources` at import time
+# (webrtcvad, used by a curated module) then fail with
 #   ModuleNotFoundError: No module named 'pkg_resources'
 setuptools<82
 
-# lint toolchain: the `lint` job installs these on their own (deliberately
-# without requirements.txt, so it needs neither ray nor torch). Unpinned it
-# resolved to mypy 2.3.1 / black 26.5.1 / isort 9.0.1 while the project pins
-# 1.20.2 / 26.3.1 / 8.0.1 -- and the newer mypy reported still-needed
-# `type: ignore[union-attr]`s in rag.py and text_to_speech.py as unused.
-# Keep these in step with requirements.txt.
+# lint toolchain: the same versions as huri-core[dev]. Unpinned it resolved to
+# mypy 2.3.1 / black 26.5.1 / isort 9.0.1, whose newer rules disagree with the
+# code as formatted and type-checked by the pinned ones.
 black==26.3.1
+flake8==7.3.0
 isort==8.0.1
 mypy==1.20.2

@@ -217,13 +217,10 @@ terraform.rc
 
 # Others
 .trash
-docs
+# Doxygen's output (Doxyfile: OUTPUT_DIRECTORY = docs); the rest of docs/ is tracked.
+/docs/html/
+/docs/latex/
 
-# HuRI client outputs
-*.wav
-/.huri-local/
-/assets/
-config/*.generated.yaml
-/qdrant_storage/
+# Local environments
 /.venv*/
 /uv.lock
